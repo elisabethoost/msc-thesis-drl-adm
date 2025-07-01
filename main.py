@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 import subprocess
+import sys
 import src.config as config
 import pandas as pd
 from train_dqn_modular import run_train_dqn_both_timesteps
@@ -251,7 +252,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = 2e6
+    MAX_TOTAL_TIMESTEPS = int(1e4)  # 100,000 timesteps for testing
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
@@ -259,6 +260,7 @@ if __name__ == "__main__":
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
     save_folder = "3-aaa-130-supertje-diverse-with-old-config"
+    # save_folder = "3-aaa-130" 
     TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
 
     # Define environment types
@@ -267,14 +269,14 @@ if __name__ == "__main__":
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
-    all_folders_temp = [
-        # "data/Training/6ac-100-stochastic-low/",
-        # "data/Training/6ac-100-stochastic-medium/",
-        # "data/Training/6ac-100-stochastic-high/",
-        # "data/Training/6ac-700-diverse/",
-        "data/RESULTS/6ac-130-supertje-diverse/"
-    ]
+    # all_folders_temp = [
+    #     "data/Example/Example-scenario-1/"
+    # ]
 
+    all_folders_temp = ["data/Example/"] 
+    
+    # main.py considers 3 different scenarios: 
+    # 1. no seed or training folder, 2. seed and training folder, 3. seed and no training folder
     if args.seed is None and args.training_folder is None:
         # Controller mode: Spawn multiple subprocesses, one per combination of seed and env_type
         config_values = get_config_variables(config)
@@ -291,15 +293,23 @@ if __name__ == "__main__":
         start_time = time.time()
 
         processes = []
+        # Get the path to the virtual environment's Python interpreter
+        venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "Scripts", "python.exe")
+        
         for seed in SEEDS:
             for env_type in env_types:
                 cmd = [
-                    "python", "main.py",
+                    venv_python,  # Use the virtual environment's Python
+                    os.path.abspath(__file__),  # Use absolute path to main.py
                     "--seed", str(seed),
                     "--env_type", env_type,
-                    "--training_folder", all_folders_temp[0]  # Add the training folder
+                    "--training_folder", all_folders_temp[0] #the training folder is specified in all_folders_temp
                 ]
-                p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+                # Set up environment variables for the subprocess
+                env = os.environ.copy()
+                env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
+                
+                p = subprocess.Popen(cmd, env=env)
                 processes.append(p)
 
         # Wait for all subprocesses to finish

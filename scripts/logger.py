@@ -7,6 +7,8 @@ from scripts.utils import NumpyEncoder
 import numpy as np
 from filelock import FileLock
 
+# create_new_id creates a new ID for the training run and adds it to the ids.json file
+# each time you run the main script, a new ID is created
 def create_new_id(id_type):
     file_path = "ids.json"  
     lock_path = file_path + ".lock"

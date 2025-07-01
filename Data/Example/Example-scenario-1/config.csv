@@ -19,3 +19,4 @@ F B D 150.0 F B C 300.0 F B I 450.0 F E D 250.0 F E C 500.0 F E I 750.0 B E D 10
 %Weights for different cost factors in the objective function %_ _ _
 1.0 1.0 1.0
 # 
+

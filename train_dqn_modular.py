@@ -1,5 +1,10 @@
-import os
+print("Starting imports...")
 import sys
+print(f"Python path: {sys.path}")
+print("Importing torch...")
+import torch as th
+print("Torch imported successfully!")
+import os
 import warnings
 import datetime
 import math
@@ -8,7 +13,6 @@ import pandas as pd
 import platform
 import re
 import subprocess
-import torch as th
 import pickle
 import gymnasium as gym
 import matplotlib.pyplot as plt
@@ -24,11 +28,14 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from scripts.utils import NumpyEncoder
 from scripts.logger import *
 from stable_baselines3.common.prioritized_replay_buffer import PrioritizedReplayBuffer
+from training_utils import TrainingMonitor
 import json
 import seaborn as sns
 sns.set(style="darkgrid")
 import time
 import subprocess
+import psutil
+import logging
 
 
 
@@ -47,30 +54,37 @@ def run_train_dqn_both_timesteps(
     TESTING_FOLDERS_PATH,
     env_type
 ):
-
     print(f"Training on {stripped_scenario_folder} with {env_type} environment")
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
     # Constants and Training Settings
-    LEARNING_RATE = 0.0001
-    GAMMA = 0.9999
-    BUFFER_SIZE = 100000
-    BATCH_SIZE = 128
-    TARGET_UPDATE_INTERVAL = 100
-    NEURAL_NET_STRUCTURE = dict(net_arch=[256, 256*2, 256])
-    LEARNING_STARTS = 0
-    TRAIN_FREQ = 4
+    # correspond to parameters used in the standard Deep Q-Network (DQN) algorithm & loss function
+    LEARNING_RATE = 0.0001                   # alpha in the Q function
+    GAMMA = 0.9999                           # Discount factor for future rewards
+    BUFFER_SIZE = 1000                       # Size of the experience replay buffer, D
+    BATCH_SIZE = 64                          # Number of samples
+    TARGET_UPDATE_INTERVAL = 50              # How often to update the target network
+    NEURAL_NET_STRUCTURE = dict(net_arch=[64, 64])  # Architecture of the Q-network, Q(s,a;θ).
 
-    EPSILON_START = 1.0
-    EPSILON_MIN = 0.025
-    PERCENTAGE_MIN = 85
-    EPSILON_TYPE = "exponential"
+    LEARNING_STARTS = 0                      # Number of steps before training starts
+    TRAIN_FREQ = 4                           # How often to train the Q-network
+
+    # Exploration parameters. epsilon-greedy exploration. exploration (random) vs exploitation (greedy).
+    EPSILON_START = 1.0                      # Starts with 100% random exploration at the beginning of training
+    EPSILON_MIN = 0.025                      # Minimum exploration rate (Doesn't let ε drop below 2.5% — there’s always some randomness to encourage continued exploration.)
+    PERCENTAGE_MIN = 85                      # Decay epsilon from 1.0 to 0.025 over the first 85% of training timesteps
+    EPSILON_TYPE = "exponential"             # Type of exploration rate decay
     if EPSILON_TYPE == "linear":
         EPSILON_MIN = 0
 
-    N_EPISODES = 50 # DOESNT MATTER
+    N_EPISODES = 10                         # Reduced from 50
 
-    starting_time = time.time()
+    # For quick testing, reduce MAX_TOTAL_TIMESTEPS if a value is provided anywhere
+    # I do not think I need this, but I will keep it for now - as I can just change the value in the main.py file
+    if 'MAX_TOTAL_TIMESTEPS' not in locals() and 'MAX_TOTAL_TIMESTEPS' not in globals():
+        MAX_TOTAL_TIMESTEPS = 1000  # Reduced for quick testing
+
+    starting_time = time.time()              # gives the time elapsed since 1970-01-01 00:00:00 UTC aka Unix epoch 
 
     # extract number of scenarios in training and testing folders
     num_scenarios_training = len(os.listdir(TRAINING_FOLDERS_PATH))
@@ -92,6 +106,7 @@ def run_train_dqn_both_timesteps(
     print(f"Device info: {device_info}")
 
     # Verify training folders and gather training data
+    # returns a list of folders inside the specified path
     training_folders = verify_training_folders(TRAINING_FOLDERS_PATH)
 
     # Calculate training days and model naming
@@ -100,12 +115,14 @@ def run_train_dqn_both_timesteps(
           f"({N_EPISODES} episodes of {len(training_folders)} scenarios)")
 
     formatted_days = format_days(num_days_trained_on)
-    MODEL_SAVE_PATH = f'../trained_models/dqn/'
+    MODEL_SAVE_PATH = f'../trained_models/dqn/'  
 
     # Create results directory
     results_dir = create_results_directory(append_to_name='dqn')
     print(f"Results directory created at: {results_dir}")
 
+    # create_new_id creates a new ID for the training run and adds it to the ids.json file
+    # each time you run the main script, a new ID is created
     from scripts.logger import create_new_id, get_config_variables
     import src.config as config
 
@@ -122,7 +139,6 @@ def run_train_dqn_both_timesteps(
         # Construct model_path with required directory structure
         model_save_dir = f"{save_folder}/{stripped_scenario_folder}"
         os.makedirs(model_save_dir, exist_ok=True)
-
         model_path = f"{model_save_dir}/{env_type}_{single_seed}.zip"
 
         print(f"Models will be saved to: {model_path}")
@@ -156,17 +172,18 @@ def run_train_dqn_both_timesteps(
             "runtime_start_in_seconds": runtime_start_in_seconds,
         }
 
+        # Initialize tracking variables
         log_data['metadata'] = {}
         log_data['episodes'] = {}
         log_data['cross_validation'] = {}
 
         best_reward_avg = float('-inf')
-        # Initialize variables
+
         rewards = {}
         good_rewards = {}
         test_rewards = []
         epsilon_values = []
-        total_timesteps = 0  # Added to track total timesteps
+        total_timesteps = 0  
         consecutive_drops = 0  # Track consecutive performance drops
         best_test_reward = float('-inf')  # Track best test performance
 
@@ -256,7 +273,8 @@ def run_train_dqn_both_timesteps(
             log_data['cross_validation'] = {}
 
             return avg_test_reward
-
+        
+        # load the training scenarios
         scenario_folders = [
             os.path.join(TRAINING_FOLDERS_PATH, folder)
             for folder in os.listdir(TRAINING_FOLDERS_PATH)
@@ -276,7 +294,6 @@ def run_train_dqn_both_timesteps(
         config_dict = data_dict['config']
 
         # initialize the environment
-
         from src.environment import AircraftDisruptionEnv
         env = AircraftDisruptionEnv(
             aircraft_dict,
@@ -287,14 +304,13 @@ def run_train_dqn_both_timesteps(
             env_type=env_type
         )
 
-
-
         model = DQN(
             policy='MultiInputPolicy',
             env=env,
             learning_rate=LEARNING_RATE,
             gamma=GAMMA,
-            buffer_size=BUFFER_SIZE,
+            buffer_size=BUFFER_SIZE,\
+            
             learning_starts=LEARNING_STARTS,
             batch_size=BATCH_SIZE,
             target_update_interval=TARGET_UPDATE_INTERVAL,
@@ -306,7 +322,27 @@ def run_train_dqn_both_timesteps(
         logger = configure()
         model._logger = logger
 
-        episode = 0
+        print("Initializing training monitor...")
+        # Initialize training monitor
+        monitor = TrainingMonitor(save_folder, stripped_scenario_folder, env_type, single_seed)
+        print(f"Monitor initialized. Log directory: {monitor.log_dir}")
+
+        # Try to load checkpoint
+        print("Checking for existing checkpoints...")
+        checkpoint_data = monitor.load_checkpoint(model)
+        if checkpoint_data:
+            total_timesteps, episode_start, rewards, test_rewards, epsilon_values, epsilon = checkpoint_data
+            print(f"Loaded checkpoint: episode {episode_start}, timesteps {total_timesteps}")
+        else:
+            print("No checkpoint found, starting fresh training")
+            total_timesteps = 0
+            episode_start = 0
+            rewards = {}
+            test_rewards = []
+            epsilon_values = []
+            epsilon = EPSILON_START
+
+        episode = episode_start
         while total_timesteps < MAX_TOTAL_TIMESTEPS:
             rewards[episode] = {}
             episode_data = {
@@ -369,47 +405,22 @@ def run_train_dqn_both_timesteps(
                         if np.random.rand() < epsilon or brute_force_flag:
                             # During exploration (50% the conflicted flights, 50% random)
                             if np.random.rand() < 0.5:
-                                # Use the conflicted environment to select action
-                                from src.environment import AircraftDisruptionConflicted
-                                # Create a copy of the current environment state for the conflicted env
-                                conflicted_env = AircraftDisruptionConflicted(
-                                    aircraft_dict=env.aircraft_dict,
-                                    flights_dict=env.flights_dict,
-                                    rotations_dict=env.rotations_dict,
-                                    alt_aircraft_dict=env.alt_aircraft_dict,
-                                    config_dict=env.config_dict
-                                )
-                                # Set the conflicted env's state to match current environment
-                                conflicted_env.current_datetime = env.current_datetime
-                                conflicted_env.state = env.state.copy()
-                                conflicted_env.unavailabilities_dict = env.unavailabilities_dict.copy()
-                                conflicted_env.cancelled_flights = env.cancelled_flights.copy()
-                                conflicted_env.environment_delayed_flights = env.environment_delayed_flights.copy()
-                                conflicted_env.penalized_delays = env.penalized_delays.copy()
-                                conflicted_env.penalized_cancelled_flights = env.penalized_cancelled_flights.copy()
-                                conflicted_env.initial_conflict_combinations = env.initial_conflict_combinations
-                                conflicted_env.eligible_flights_for_resolved_bonus = env.eligible_flights_for_resolved_bonus
-                                conflicted_env.eligible_flights_for_not_being_cancelled_when_disruption_happens = env.eligible_flights_for_not_being_cancelled_when_disruption_happens
-                                conflicted_env.scenario_wide_initial_disrupted_flights_list = env.scenario_wide_initial_disrupted_flights_list
-                                conflicted_env.scenario_wide_actual_disrupted_flights = env.scenario_wide_actual_disrupted_flights
-                                conflicted_env.something_happened = False
-                                conflicted_env.tail_swap_happened = False
-                                conflicted_env.scenario_wide_reward_components = env.scenario_wide_reward_components.copy()
-                                conflicted_env.scenario_wide_delay_minutes = env.scenario_wide_delay_minutes
-                                conflicted_env.scenario_wide_cancelled_flights = env.scenario_wide_cancelled_flights
-                                conflicted_env.scenario_wide_steps = env.scenario_wide_steps
-                                conflicted_env.scenario_wide_resolved_conflicts = env.scenario_wide_resolved_conflicts
-                                conflicted_env.scenario_wide_solution_slack = env.scenario_wide_solution_slack
-                                conflicted_env.scenario_wide_tail_swaps = env.scenario_wide_tail_swaps
-                                conflicted_env.info_after_step = {}
-
-                                # Get action mask from conflicted env
-                                action_mask = conflicted_env.get_action_mask()
-                                # Choose random action from valid actions in the restricted mask
-                                valid_actions = np.where(action_mask == 1)[0]
-                                action = np.random.choice(valid_actions)
-                                action = np.array(action).reshape(1, -1)
-                                action_reason = "conflicted-random"
+                                # Get current conflicts and use them to guide exploration
+                                current_conflicts = env.get_current_conflicts()
+                                if current_conflicts:
+                                    # Get action mask from current environment
+                                    action_mask = env.get_action_mask()
+                                    # Choose random action from valid actions in the restricted mask
+                                    valid_actions = np.where(action_mask == 1)[0]
+                                    action = np.random.choice(valid_actions)
+                                    action = np.array(action).reshape(1, -1)
+                                    action_reason = "conflict-guided-random"
+                                else:
+                                    # If no conflicts, fall back to random exploration
+                                    valid_actions = np.where(action_mask == 1)[0]
+                                    action = np.random.choice(valid_actions)
+                                    action = np.array(action).reshape(1, -1)
+                                    action_reason = "exploration"
                             else:
                                 # Random exploration from original action mask
                                 valid_actions = np.where(action_mask == 1)[0]
@@ -464,6 +475,18 @@ def run_train_dqn_both_timesteps(
                     if total_timesteps % model.target_update_interval == 0:
                         polyak_update(model.q_net.parameters(), model.q_net_target.parameters(), model.tau)
                         polyak_update(model.batch_norm_stats, model.batch_norm_stats_target, 1.0)
+
+                    # Monitor system health every 10,000 timesteps
+                    if total_timesteps % 10000 == 0:
+                        monitor.check_system_health(
+                            model, total_timesteps, episode, rewards, test_rewards, epsilon_values, epsilon
+                        )
+
+                    # Add checkpoint saving every 50,000 timesteps
+                    if total_timesteps % 50000 == 0:
+                        monitor.save_checkpoint(
+                            model, total_timesteps, episode, rewards, test_rewards, epsilon_values, epsilon
+                        )
 
                     num_cancelled_flights_after_step = len(env.cancelled_flights)
                     num_delayed_flights_after_step = len(env.environment_delayed_flights)
