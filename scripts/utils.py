@@ -205,7 +205,7 @@ def print_state_semi_raw(state):
 def print_state_raw(state, env_type):
     print(state)
 
-# Parsing all the data files
+# Parsing all the data files. Parsing means converting the data from a string format to a dictionary format.
 class FileParsers:
     
     @staticmethod
@@ -324,7 +324,7 @@ class FileParsers:
                 'StartTime': parts[2],
                 'EndDate': parts[3],
                 'EndTime': parts[4],
-                'Probability': float(parts[5])
+                'Probability': float(parts[5]) if len(parts) > 5 else 1.0  # Default to 1.0 if probability not specified
             }
         return alt_aircraft_dict
 

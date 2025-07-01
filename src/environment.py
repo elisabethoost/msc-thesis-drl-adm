@@ -168,7 +168,7 @@ class AircraftDisruptionEnv(gym.Env):
         time_until_end_minutes = (self.end_datetime - self.current_datetime).total_seconds() / 60
 
         # Insert the current_time_minutes and time_until_end_minutes in the first row
-        for i in range(0, 2):  # Start at 0 and step by 2 for the half of the columns
+        for i in range(0, 2):  # Start at 0 and  by 2 for the half of the columns
             if i + 1 < self.columns_state_space:  # Check to ensure i+1 is in range
                 state[0, i] = current_time_minutes  # Current time
                 state[0, i + 1] = time_until_end_minutes  # Time until end of recovery period
@@ -540,6 +540,8 @@ class AircraftDisruptionEnv(gym.Env):
         Probabilities evolve stochastically over time but are capped at [0.05, 0.95].
         When the current datetime + timestep reaches the breakdown start time,
         resolve the uncertainty fully to 0.00 or 1.00 by rolling the dice.
+
+        The bias term pushes probabilities that are above 0.5 towards 1.0 and probabilities below 0.5 towards 0.0       
         """
         if DEBUG_MODE:
             print(f"Current datetime: {self.current_datetime}")
@@ -990,7 +992,7 @@ class AircraftDisruptionEnv(gym.Env):
                 print(f"Unavail times - Start: {unavail_start}, End: {unavail_end}")
 
             if aircraft_id == current_aircraft_id:
-                if unavail_prob > 0.00:
+                if unavail_prob > 0.00: #move flight after unavailability
                     if DEBUG_MODE_SCHEDULING:
                         print("Case 1: Current aircraft with prob > 0.00 - Moving flight after unavailability")
                     dep_time = max(dep_time, unavail_end + MIN_TURN_TIME)
@@ -999,12 +1001,12 @@ class AircraftDisruptionEnv(gym.Env):
                     delay = dep_time - original_dep_minutes
                     self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
                     self.something_happened = True
-                else:
+                else: #unavail prob = 0.00, keep original schedule
                     if DEBUG_MODE_SCHEDULING:
                         print("Case 2: Current aircraft with prob = 0.00 - Keeping original schedule")
                     self.something_happened = False
-            else:
-                if unavail_prob == 1.00:
+            else: #aircraft_id != current_aircraft_id
+                if unavail_prob == 1.00: #move flight after unavailability
                     if DEBUG_MODE_SCHEDULING:
                         print("Case 3: Different aircraft with prob = 1.00 - Moving flight after unavailability")
                     dep_time = max(dep_time, unavail_end + MIN_TURN_TIME)
@@ -1013,7 +1015,7 @@ class AircraftDisruptionEnv(gym.Env):
                     delay = dep_time - original_dep_minutes
                     self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
                     self.something_happened = True
-                else:
+                else: #unavail prob < 1.00, allow overlap
                     if DEBUG_MODE_SCHEDULING:
                         print("Case 4: Different aircraft with prob < 1.00 - Allowing overlap")
                     self.something_happened = True
