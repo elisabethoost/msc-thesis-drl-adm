@@ -1,6 +1,45 @@
-## How to use
+## Quick Start (Reproducibility)
+this is a test to see if I am working on the state-space branch
+**Requirements:**
+- Python 3.11 (recommended; other 3.10+ versions may work)
+- Git
+- (Optional) A C++ compiler for some dependencies (e.g., gym, torch)
 
-elli
+**1. Clone the repository:**
+```sh
+git clone <your-repo-url>
+cd <repo-folder>
+```
+
+**2. Create and activate a virtual environment:**
+- On Windows:
+  ```sh
+  python -m venv venv
+  venv\Scripts\activate
+  ```
+- On macOS/Linux:
+  ```sh
+  python3 -m venv venv
+  source venv/bin/activate
+  ```
+
+**3. Install dependencies:**
+```sh
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**4. (Optional) GPU support:**
+- If you want to use GPU acceleration, ensure you have the correct CUDA version installed for your PyTorch version. See https://pytorch.org/get-started/locally/ for details.
+
+**Troubleshooting:**
+- If you encounter errors related to missing system libraries (e.g., C++ build tools), install them via your OS package manager.
+- If you see line ending warnings (LF/CRLF), you can ignore them—they do not affect code execution.
+- Do **not** commit your `venv/` directory to git. It is ignored by default in `.gitignore`.
+
+---
+
+## How to use
 
 1. **Scenario Setup**: 
     - Each scenario (e.g., `Example-scenario-1`, `Training-modified/Scenario_01`) provides the input data (aircraft, airports, flights, etc.) in CSV format. The DQN model uses this data to create the initial state space for learning.
