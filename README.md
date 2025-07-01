@@ -1,5 +1,5 @@
 ## Quick Start (Reproducibility)
-this is a test to see if I am working on the state-space branch
+
 **Requirements:**
 - Python 3.11 (recommended; other 3.10+ versions may work)
 - Git
