@@ -375,16 +375,18 @@ def run_train_dqn_both_timesteps(
                 )
                 model.set_env(env)
 
+                # initializes the environment and returns the initial observation (obs). Underscore _ is used to ignore the second value returned by reset() 
+                # obs (or env.reset) is a dictionary: its keys contain the state vector and the action mask i.e which actions are valid at the current step.
                 obs, _ = env.reset()
                 done_flag = False
                 total_reward_local = 0
                 timesteps_local = 0
 
                 while not done_flag:
-                    num_cancelled_flights_before_step = len(env.cancelled_flights)
-                    num_delayed_flights_before_step = len(env.environment_delayed_flights)
-                    num_penalized_delays_before_step = len(env.penalized_delays)
-                    num_penalized_cancelled_before_step = len(env.penalized_cancelled_flights)
+                    num_cancelled_flights_before_step = len(env.cancelled_flights)             # immediately after reset this is 0 as there are no cancelled flights at the start of the episode
+                    num_delayed_flights_before_step = len(env.environment_delayed_flights)     # empty dictionary
+                    num_penalized_delays_before_step = len(env.penalized_delays)               # empty dictionary
+                    num_penalized_cancelled_before_step = len(env.penalized_cancelled_flights) # empty set
 
                     model.exploration_rate = epsilon
 
@@ -409,7 +411,7 @@ def run_train_dqn_both_timesteps(
                                 current_conflicts = env.get_current_conflicts()
                                 if current_conflicts:
                                     # Get action mask from current environment
-                                    action_mask = env.get_action_mask()
+                                    action_mask = env.get_action_mask() 
                                     # Choose random action from valid actions in the restricted mask
                                     valid_actions = np.where(action_mask == 1)[0]
                                     action = np.random.choice(valid_actions)
@@ -450,7 +452,7 @@ def run_train_dqn_both_timesteps(
 
                     rewards[episode][scenario_folder][timesteps_local] = reward
 
-                    done_flag = terminated or truncated
+                    done_flag = terminated or truncated     # done_flag is True if the episode is terminated or truncated
 
                     model.replay_buffer.add(
                         obs=obs,

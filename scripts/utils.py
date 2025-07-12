@@ -327,6 +327,25 @@ class FileParsers:
                 'Probability': float(parts[5]) if len(parts) > 5 else 1.0  # Default to 1.0 if probability not specified
             }
         return alt_aircraft_dict
+    
+    # @staticmethod
+    # def parse_alt_aircraft(data_lines):
+    #     """Parses the alt_aircraft file into a dictionary."""
+    #     if data_lines is None:
+    #         return {}
+
+    #     alt_aircraft_dict = {}
+    #     for line in data_lines:
+    #         parts = re.split(r'\s+', line)
+    #         alt_aircraft_dict[parts[0]] = {
+    #             'StartDate': parts[1],
+    #             'StartTime': parts[2],
+    #             'EndDate': parts[3],
+    #             'EndTime': parts[4],
+    #             'Probability': float(parts[5])
+    #         }
+    #     return alt_aircraft_dict
+
 
     @staticmethod
     def parse_alt_airports(data_lines):

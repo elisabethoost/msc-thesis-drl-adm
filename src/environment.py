@@ -45,8 +45,8 @@ class AircraftDisruptionEnv(gym.Env):
         self.timestep_minutes = TIMESTEP_HOURS * 60
 
         # Aircraft information and indexing
-        self.aircraft_ids = list(aircraft_dict.keys())
-        self.aircraft_id_to_idx = {aircraft_id: idx for idx, aircraft_id in enumerate(self.aircraft_ids)}
+        self.aircraft_ids = list(aircraft_dict.keys()) # list of aircraft ids e.g. ['B737#1', 'A320#2', 'B737#2']
+        self.aircraft_id_to_idx = {aircraft_id: idx for idx, aircraft_id in enumerate(self.aircraft_ids)} # dict of aircraft ids to indices e.g. {'B737#1': 0, 'A320#2': 1, 'B737#2': 2}
 
         self.conflicted_flights = {}  # Tracks flights in conflict due to past departure and prob == 1.0
     
@@ -87,12 +87,8 @@ class AircraftDisruptionEnv(gym.Env):
             )
         })
 
-        # Action space: select a flight and an aircraft
-        self.action_space = spaces.Discrete(ACTION_SPACE_SIZE)
-
         # Store the dictionaries as class attributes
         self.alt_aircraft_dict = alt_aircraft_dict
-
         self.rotations_dict = rotations_dict
         self.flights_dict = flights_dict
         self.aircraft_dict = aircraft_dict
@@ -106,21 +102,21 @@ class AircraftDisruptionEnv(gym.Env):
         # Track environment state related to delays and conflicts
         self.environment_delayed_flights = {}   # Tracks delays for flights {flight_id: delay_minutes}
         self.penalized_delays = {}           # Set of penalized delays
+        self.penalized_cancelled_flights = set()  # To keep track of penalized cancelled flights
+        self.cancelled_flights = set()
         
         self.penalized_conflicts = set()        # Set of penalized conflicts
         self.resolved_conflicts = set()         # Set of resolved conflicts
-        self.penalized_cancelled_flights = set()  # To keep track of penalized cancelled flights
-
-        self.cancelled_flights = set()
+        
 
         # Initialize empty containers for breakdowns
         self.uncertain_breakdowns = {}
         self.current_breakdowns = {}
 
-        self.info_after_step = {}
-
         # Initialize a dictionary to store unavailabilities
         self.unavailabilities_dict = {}
+
+        self.info_after_step = {}
 
         # Initialize the environment state without generating probabilities
         self.current_datetime = self.start_datetime
@@ -191,10 +187,10 @@ class AircraftDisruptionEnv(gym.Env):
 
             # Check for predefined unavailabilities and assign actual probability         
             if aircraft_id in self.alt_aircraft_dict:
-                unavails = self.alt_aircraft_dict[aircraft_id]
+                unavails = self.alt_aircraft_dict[aircraft_id] # list of unavailabilities for the aircraft e.g. [{'StartDate': '01/07/25', 'StartTime': '00:00', 'EndDate': '01/07/25', 'EndTime': '00:00', 'Probability': 1.0}]
                 if not isinstance(unavails, list):
                     unavails = [unavails]
-                breakdown_probability = unavails[0].get('Probability', 1.0)
+                breakdown_probability = unavails[0].get('Probability', 1.0) 
 
                 # Get earliest start and latest end time
                 start_times = []
@@ -254,6 +250,7 @@ class AircraftDisruptionEnv(gym.Env):
             state[idx + 1, 3] = unavail_end_minutes
 
             # Gather and store flight times (starting from column 4)
+            # we add every flight that has not yet departed and that is not in conflict with an unavailability period
             flight_times = []
             for flight_id, rotation_info in self.rotations_dict.items():
                 if flight_id in self.flights_dict and rotation_info['Aircraft'] == aircraft_id:
@@ -264,7 +261,7 @@ class AircraftDisruptionEnv(gym.Env):
                     dep_time_minutes = (dep_time - self.earliest_datetime).total_seconds() / 60
                     arr_time_minutes = (arr_time - self.earliest_datetime).total_seconds() / 60
 
-                    # Exclude flights that have already departed and are in conflict
+                    # Exclude flights that have already departed and are in conflict and that overlap with an unavailability period
                     if dep_time_minutes < current_time_minutes:
                         # Flight has already departed
                         if breakdown_probability == 1.00 and not np.isnan(unavail_start_minutes) and not np.isnan(unavail_end_minutes):
@@ -358,8 +355,10 @@ class AircraftDisruptionEnv(gym.Env):
             'action_mask': action_mask
         }
         return obs_with_mask, state_to_observe
+        # obs_with_mask: A dictionary containing both the state vector and the action mask (= a vector indicating which actions are valid (1 = valid, 0 = invalid) in the current state)
+        # state_to_observe: A copy of the state matrix that is used to update the state matrix after each step but with certain information hidden
 
-    
+    # YES: need to modify for new state-space system
     def fix_state(self, state):
         # Go over all starttimes and endtimes (columns 2 and 3 for unavailabilities and then for flights: 5, 6, 8, 9, 11, 12, ...)
         # If endtime is smaller than starttime, add 1440 minutes to endtime
@@ -371,7 +370,7 @@ class AircraftDisruptionEnv(gym.Env):
                     state[i, j + 2] += 1440
 
     def remove_flight(self, flight_id):
-        """Removes the specified flight from the dictionaries."""
+        """Removes the specified flight from the dictionaries. Adds it to the cancelled_flights set."""
         # Remove from flights_dict
         if flight_id in self.flights_dict:
             del self.flights_dict[flight_id]
@@ -430,10 +429,10 @@ class AircraftDisruptionEnv(gym.Env):
             print(f"Chosen action: flight {flight_action}, aircraft {aircraft_action}")
 
         # Get pre-action conflicts
+        # Gets probabilities ac unavailitbilities that have not yet been resolved (they are neither 1 or 0 but 0<p<1)
         pre_action_conflicts = self.get_current_conflicts()
         unresolved_uncertainties = self.get_unresolved_uncertainties()
 
-        # print("-----1-----")
         # print(f"pre_action_conflicts: {pre_action_conflicts}")
 
         # Process uncertainties before handling flight operations
@@ -506,7 +505,8 @@ class AircraftDisruptionEnv(gym.Env):
 
         return flight_action, aircraft_action
 
-    def validate_action(self, flight_action, aircraft_action):
+    # NO need to modify for new state-space formulation
+    def validate_action(self, flight_action, aircraft_action): 
         """Validates the provided action values.
 
         Args:
@@ -1752,7 +1752,7 @@ class AircraftDisruptionEnv(gym.Env):
                     unresolved_uncertainties.append((aircraft_id, prob))
         return unresolved_uncertainties
 
-
+    # YES: need to modify for new state-space formulation 
     def get_valid_flight_actions(self):
         """Generates a list of valid flight actions based on flights in state space."""
         # Calculate current time in minutes from earliest_datetime
@@ -1785,7 +1785,7 @@ class AircraftDisruptionEnv(gym.Env):
         return [0] + valid_flight_ids
 
 
-
+    # NO need to modify for new state-space formulation
     def get_valid_aircraft_actions(self):
         """Generates a list of valid aircraft actions for the agent.
 
@@ -1794,6 +1794,11 @@ class AircraftDisruptionEnv(gym.Env):
         """
         return list(range(len(self.aircraft_ids) + 1))  # 0 to len(aircraft_ids)
 
+
+    # YES: need to modify for new state-space formulation
+    # get_action_mask creates a binary vector action_mask that gets filled with 1s for valid flight & ac pairs (assign flight x to aircraft y )
+    # it considers all valid (flight has not departed yet) flight & ac pairs regardless whether it resolves a conflict or not
+    # whether the chosen pair will create a new conflict we do not know yet - will be checked later in step
     def get_action_mask(self):
         valid_flight_actions = self.get_valid_flight_actions()
         valid_aircraft_actions = self.get_valid_aircraft_actions()
@@ -1806,11 +1811,15 @@ class AircraftDisruptionEnv(gym.Env):
                     # Only allow (flight_action=0, aircraft_action=0)
                     if aircraft_action != 0:
                         continue
-                index = self.map_action_to_index(flight_action, aircraft_action)
+                index = self.map_action_to_index(flight_action, aircraft_action) 
                 if index < self.action_space.n:
                     action_mask[index] = 1
 
-        # For reactive environment, only allow 0,0 action if no current conflicts with prob==1.00
+        # For reactive environment, only allow 0,0 action unless an immediate or imminent conflict with prob==1.00 exists - then use default action mask
+        # Check each aircraft for disruptions with probability 1
+        # look for ac unavailibility periods of p = 1: if current_time is inside that period rn, we can use default action mask. if it is NOT inside:
+        # default action mask can still be used IF the next timestep will reach or pass the start of a disruption or the departure of a conflicted flight
+        # Otherwise: only 0,0 action can be chosen aka nothing is done - no flight is allocated to an ac
         if self.env_type == 'reactive':
             reactive_allowed_to_take_action = False
             current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
@@ -1820,7 +1829,6 @@ class AircraftDisruptionEnv(gym.Env):
             earliest_disruption_start = float('inf')
             earliest_disruption_end = float('inf')
 
-            # Check each aircraft for disruptions with probability 1
             for idx, aircraft_id in enumerate(self.aircraft_ids):
                 breakdown_prob = self.unavailabilities_dict[aircraft_id]['Probability']
                 if breakdown_prob == 1.0:
@@ -1869,6 +1877,7 @@ class AircraftDisruptionEnv(gym.Env):
         #     print(f"Action {i}: {action_mask[i]}")
         return action_mask
 
+    # NO need to modify for new state-space formulation
     def map_action_to_index(self, flight_action, aircraft_action):
         """Maps the (flight, aircraft) action pair to a single index in the flattened action space.
 
@@ -1881,7 +1890,8 @@ class AircraftDisruptionEnv(gym.Env):
         """
         return flight_action * (len(self.aircraft_ids) + 1) + aircraft_action
     
-    def map_index_to_action(self, index):
+    # NO need to modify for new state-space formulation
+    def map_index_to_action(self, index): 
         """Maps the flattened action space index to the corresponding (flight, aircraft) action pair.
 
         Args:
