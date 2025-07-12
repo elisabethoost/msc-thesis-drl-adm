@@ -1,6 +1,6 @@
 # This is a test file to check if the code is working
 import os
-
+'''
 def verify_training_folders(path):
     """Verify if the training folders exist and return folder names."""
     if not os.path.exists(path):
@@ -41,6 +41,33 @@ scenario_folders.append({
                 })
 
 print(scenario_folders)
+'''
+
+l = [1,2,3,4,5,6,7,8,9,10]
+m = [6,7,7,9]
+b = len(l)
+a = list(range(len(l) + 1))
+print(f"length of l is {b}")
+print(f'a is {a}')
+
+y = []
+for i in m:
+    y.append(i)
+
+print(f'y is {y}')
+
+all_folders_temp = [
+        "data/Training/6ac-100-stochastic-low/",
+        "data/Training/6ac-100-stochastic-medium/",
+        "data/Training/6ac-100-stochastic-high/",
+        "data/Training/6ac-700-diverse/",
+        "data/RESULTS/6ac-130-supertje-diverse/"
+    ]
+
+print(f"the chosen folder is {all_folders_temp[2]}")
+
+
+
 
 
 

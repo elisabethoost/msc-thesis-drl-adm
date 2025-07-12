@@ -259,9 +259,10 @@ if __name__ == "__main__":
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "3-aaa-130-supertje-diverse-with-old-config"
-    # save_folder = "3-aaa-130" 
-    TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
+    # save_folder = "3-aaa-130-supertje-diverse-with-old-config"
+    save_folder = "6ac-20-lilac-deterministic-11-07"
+    # TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
+    TESTING_FOLDER_PATH = "Data\TRAINING\6ac-20-lilac"
 
     # Define environment types
     env_types = ['myopic', 'proactive', 'reactive']
@@ -273,10 +274,19 @@ if __name__ == "__main__":
     #     "data/Example/Example-scenario-1/"
     # ]
 
-    all_folders_temp = ["data/Example/"] 
-    
+    # all_folders_temp = ["data/Example/"] 
+    all_folders_temp = [
+        "Data\TRAINING\6ac-13-mauve"
+
+        # "Data\TRAINING\6ac-13-mauve",
+        # "Data/TRAINING/6ac-20-lilac/", 
+        # "Data\TRAINING\6ac-65-yellow"  
+      
+        ]
+
     # main.py considers 3 different scenarios: 
     # 1. no seed or training folder, 2. seed and training folder, 3. seed and no training folder
+    # Case 1/3
     if args.seed is None and args.training_folder is None:
         # Controller mode: Spawn multiple subprocesses, one per combination of seed and env_type
         config_values = get_config_variables(config)
@@ -333,6 +343,8 @@ if __name__ == "__main__":
         total_runtime = end_time - start_time
         print(f"\nTotal runtime: {total_runtime:.2f} seconds")
 
+    # specify in terminal sth like: python main.py --seed 232323 --training_folder "Data/TRAINING/6ac-20-lilac/deterministic_Scenario_00001"
+    # Case 2/3
     elif args.seed is not None and args.training_folder:
         # Worker mode: run a single scenario folder for a single seed and env_type
         run_for_single_folder(
@@ -349,6 +361,8 @@ if __name__ == "__main__":
             env_type=args.env_type
         )
 
+    # Case 2/3
+    # specify sth like python main.py --seed 232323 --training_folder "Data/TRAINING/6ac-20-lilac/"
     elif args.seed is not None and args.training_folder is None:
         # Worker mode: run all scenario folders for this single seed and env_type
         for folder in all_folders_temp:

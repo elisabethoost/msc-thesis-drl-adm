@@ -7,6 +7,8 @@ from scripts.utils import NumpyEncoder
 import numpy as np
 from filelock import FileLock
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
 # create_new_id creates a new ID for the training run and adds it to the ids.json file
 # each time you run the main script, a new ID is created
 def create_new_id(id_type):
@@ -57,7 +59,15 @@ def log_scenario_folder(logs_id, scenario_folder_path, inputs, outputs):
         "outputs": outputs
     }
 
-    log_file_path = os.path.join("../logs", "scenarios", f"scenario_folder_{logs_id}.json")
+    # log_file_path = os.path.join("../logs", "scenarios", f"scenario_folder_{logs_id}.json")
+    log_file_path = os.path.join(PROJECT_ROOT, "logs", "scenarios", f"scenario_folder_{logs_id}.json")
+
+    # Ensure the directory exists and print debug info
+    dir_path = os.path.dirname(log_file_path)
+    print(f"Ensuring directory exists: {dir_path}")
+    os.makedirs(dir_path, exist_ok=True)
+    print(f"About to write log file to: {log_file_path}")
+    print(f"Directory exists? {os.path.isdir(dir_path)}")
 
     with open(log_file_path, 'w') as log_file:
         json.dump(log_data, log_file, indent=4)
