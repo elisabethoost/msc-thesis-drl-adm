@@ -324,7 +324,8 @@ class FileParsers:
                 'StartTime': parts[2],
                 'EndDate': parts[3],
                 'EndTime': parts[4],
-                'Probability': float(parts[5]) if len(parts) > 5 else 1.0  # Default to 1.0 if probability not specified
+                # 'Probability': float(parts[5]) if len(parts) > 5 else 1.0  # Default to 1.0 if probability not specified
+                'Probability': float(parts[5]) # original code
             }
         return alt_aircraft_dict
     
