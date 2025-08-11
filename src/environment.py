@@ -1033,57 +1033,26 @@ class AircraftDisruptionEnv(gym.Env):
         # Sort flights by departure time
         scheduled_flights.sort(key=lambda x: x[1])
 
-        # Find where our flight should be inserted
+        # Find optimal placement to minimize total delays
+        optimal_dep_time, optimal_arr_time = self._find_optimal_placement(
+            flight_id, dep_time, arr_time, scheduled_flights, original_dep_minutes
+        )
+        
+        # Update our flight times with optimal placement
+        dep_time = optimal_dep_time
+        arr_time = optimal_arr_time
+
+        # Insert our flight at the optimal position
         insert_idx = 0
         for i, (_, existing_dep_time, _) in enumerate(scheduled_flights):
             if dep_time < existing_dep_time:
                 break
             insert_idx = i + 1
 
-        # Insert our flight at the correct position
         scheduled_flights.insert(insert_idx, (flight_id, dep_time, arr_time))
 
-        # Now process all flights in sequence to ensure proper spacing
-        for i in range(len(scheduled_flights)):
-            current_flight = scheduled_flights[i]
-            current_flight_id = current_flight[0]
-            current_dep_time = current_flight[1]
-            current_arr_time = current_flight[2]
-
-            # Check for overlap with previous flight
-            if i > 0:
-                prev_flight = scheduled_flights[i-1]
-                prev_arr_time = prev_flight[2]
-                
-                # If there's an overlap, delay the current flight
-                if current_dep_time < prev_arr_time + MIN_TURN_TIME:
-                    new_dep_time = prev_arr_time + MIN_TURN_TIME
-                    new_arr_time = new_dep_time + (current_arr_time - current_dep_time)
-                    
-                    # Update the flight times
-                    if current_flight_id == flight_id:
-                        dep_time = new_dep_time
-                        arr_time = new_arr_time
-                    else:
-                        # Update the other flight's times
-                        self.update_flight_times(current_flight_id, new_dep_time, new_arr_time)
-                        for k in range(4, self.columns_state_space - 2, 3):
-                            if self.state[aircraft_idx, k] == current_flight_id:
-                                self.state[aircraft_idx, k + 1] = new_dep_time
-                                self.state[aircraft_idx, k + 2] = new_arr_time
-                                break
-                    
-                    # Update the scheduled_flights list with new times
-                    scheduled_flights[i] = (current_flight_id, new_dep_time, new_arr_time)
-                    
-                    # Track the delay
-                    original_dep = parse_time_with_day_offset(
-                        self.flights_dict[current_flight_id]['DepTime'], 
-                        self.start_datetime
-                    )
-                    original_dep_minutes = (original_dep - self.earliest_datetime).total_seconds() / 60
-                    delay = new_dep_time - original_dep_minutes
-                    self.environment_delayed_flights[current_flight_id] = self.environment_delayed_flights.get(current_flight_id, 0) + delay
+        # Now process all flights in sequence to ensure proper spacing with minimal cascading
+        self._optimize_schedule_with_minimal_cascading(scheduled_flights, aircraft_idx)
 
         # Finally, update the state for our flight
         flight_placed = False
@@ -1107,9 +1076,114 @@ class AircraftDisruptionEnv(gym.Env):
             print(f"Final departure time for flight {flight_id}: {dep_time} minutes.")
             print(f"Final arrival time for flight {flight_id}: {arr_time} minutes.")
 
-
-
+    def _find_optimal_placement(self, flight_id, dep_time, arr_time, scheduled_flights, original_dep_minutes):
+        """
+        Finds the optimal placement for a flight to minimize total delays.
         
+        Args:
+            flight_id (int): The flight to place
+            dep_time (float): Initial departure time
+            arr_time (float): Initial arrival time
+            scheduled_flights (list): List of existing flights on the aircraft
+            original_dep_minutes (float): Original departure time
+            
+        Returns:
+            tuple: (optimal_dep_time, optimal_arr_time)
+        """
+        if not scheduled_flights:
+            return dep_time, arr_time
+            
+        flight_duration = arr_time - dep_time
+        min_total_delay = float('inf')
+        optimal_dep = dep_time
+        optimal_arr = arr_time
+        
+        # Try placing the flight at different positions
+        for insert_pos in range(len(scheduled_flights) + 1):
+            # Create a copy of scheduled flights for testing
+            test_schedule = scheduled_flights.copy()
+            test_schedule.insert(insert_pos, (flight_id, dep_time, arr_time))
+            
+            # Calculate total delay for this placement
+            total_delay = 0
+            current_time = 0
+            
+            for i, (test_flight_id, test_dep, test_arr) in enumerate(test_schedule):
+                # Check for overlap with previous flight
+                if test_dep < current_time + MIN_TURN_TIME:
+                    new_dep = current_time + MIN_TURN_TIME
+                    new_arr = new_dep + (test_arr - test_dep)
+                    
+                    # Calculate delay for this flight
+                    if test_flight_id == flight_id:
+                        delay = new_dep - original_dep_minutes
+                    else:
+                        # Get original time for other flights
+                        orig_dep = parse_time_with_day_offset(
+                            self.flights_dict[test_flight_id]['DepTime'], 
+                            self.start_datetime
+                        )
+                        orig_dep_minutes = (orig_dep - self.earliest_datetime).total_seconds() / 60
+                        delay = new_dep - orig_dep_minutes
+                    
+                    total_delay += max(0, delay)
+                    current_time = new_arr
+                else:
+                    current_time = test_arr
+                    
+            # Update optimal placement if this has less total delay
+            if total_delay < min_total_delay:
+                min_total_delay = total_delay
+                optimal_dep = dep_time
+                optimal_arr = arr_time
+                
+        return optimal_dep, optimal_arr
+    
+    def _optimize_schedule_with_minimal_cascading(self, scheduled_flights, aircraft_idx):
+        """
+        Optimizes the schedule to minimize cascading delays.
+        
+        Args:
+            scheduled_flights (list): List of flights to optimize
+            aircraft_idx (int): Aircraft index in state
+        """
+        current_time = 0
+        
+        for i, (flight_id, dep_time, arr_time) in enumerate(scheduled_flights):
+            # Check for overlap with previous flight
+            if dep_time < current_time + MIN_TURN_TIME:
+                new_dep_time = current_time + MIN_TURN_TIME
+                new_arr_time = new_dep_time + (arr_time - dep_time)
+                
+                # Update the flight times
+                if flight_id == flight_id:  # This is our flight
+                    dep_time = new_dep_time
+                    arr_time = new_arr_time
+                else:
+                    # Update the other flight's times
+                    self.update_flight_times(flight_id, new_dep_time, new_arr_time)
+                    for k in range(4, self.columns_state_space - 2, 3):
+                        if self.state[aircraft_idx, k] == flight_id:
+                            self.state[aircraft_idx, k + 1] = new_dep_time
+                            self.state[aircraft_idx, k + 2] = new_arr_time
+                            break
+                
+                # Update the scheduled_flights list with new times
+                scheduled_flights[i] = (flight_id, new_dep_time, new_arr_time)
+                
+                # Track the delay
+                original_dep = parse_time_with_day_offset(
+                    self.flights_dict[flight_id]['DepTime'], 
+                    self.start_datetime
+                )
+                original_dep_minutes = (original_dep - self.earliest_datetime).total_seconds() / 60
+                delay = new_dep_time - original_dep_minutes
+                self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
+                
+                current_time = new_arr_time
+            else:
+                current_time = arr_time
+
     def cancel_flight(self, flight_id):
         """Cancels the specified flight.
 
@@ -1272,6 +1346,24 @@ class AircraftDisruptionEnv(gym.Env):
         if DEBUG_MODE_REWARD and self.tail_swap_happened:
             print(f"  -{tail_swap_penalty} penalty for tail swap")
         
+        # 8. Efficiency Bonus: Reward for efficient conflict resolution
+        efficiency_bonus = 0
+        if flight_action != 0 and aircraft_action != 0:
+            # Bonus for resolving conflicts with minimal impact
+            if len(resolved_conflicts) > 0 and delay_penalty_minutes < 100:  # Small delay
+                efficiency_bonus = len(resolved_conflicts) * 1000  # 1000 per resolved conflict
+                if DEBUG_MODE_REWARD:
+                    print(f"  +{efficiency_bonus} efficiency bonus for resolving {len(resolved_conflicts)} conflicts with minimal delay")
+        
+        # 9. Alternative Solution Penalty: Penalty for not considering better alternatives
+        alternative_penalty = 0
+        if flight_action != 0 and aircraft_action == 0:  # Cancellation action
+            # Check if there were better alternatives available
+            if self._better_alternatives_exist(flight_action):
+                alternative_penalty = 2000  # Penalty for not using better alternatives
+                if DEBUG_MODE_REWARD:
+                    print(f"  -{alternative_penalty} penalty for not using better alternatives")
+        
         # Reset tail swap tracking for next step
         self.tail_swap_happened = False
 
@@ -1288,6 +1380,8 @@ class AircraftDisruptionEnv(gym.Env):
             - time_penalty
             + final_conflict_resolution_reward
             - tail_swap_penalty
+            + efficiency_bonus
+            - alternative_penalty
         )
 
         # Update scenario-wide reward components
@@ -1298,7 +1392,9 @@ class AircraftDisruptionEnv(gym.Env):
             "proactive_bonus": self.scenario_wide_reward_components["proactive_bonus"] + proactive_bonus,
             "time_penalty": self.scenario_wide_reward_components["time_penalty"] - time_penalty,
             "final_conflict_resolution_reward": self.scenario_wide_reward_components["final_conflict_resolution_reward"] + final_conflict_resolution_reward,
-            "tail_swap_penalty": self.scenario_wide_reward_components.get("tail_swap_penalty", 0) - tail_swap_penalty
+            "tail_swap_penalty": self.scenario_wide_reward_components.get("tail_swap_penalty", 0) - tail_swap_penalty,
+            "efficiency_bonus": self.scenario_wide_reward_components.get("efficiency_bonus", 0) + efficiency_bonus,
+            "alternative_penalty": self.scenario_wide_reward_components.get("alternative_penalty", 0) - alternative_penalty
         })
 
         # Store reward components in state
@@ -1336,7 +1432,9 @@ class AircraftDisruptionEnv(gym.Env):
             "flight_action": flight_action,
             "aircraft_action": aircraft_action,
             "original_departure_time": original_flight_action_departure_time,
-            "tail_swap_penalty": tail_swap_penalty
+            "tail_swap_penalty": tail_swap_penalty,
+            "efficiency_bonus": efficiency_bonus,
+            "alternative_penalty": alternative_penalty
         }
 
         return reward
@@ -1813,7 +1911,9 @@ class AircraftDisruptionEnv(gym.Env):
                         continue
                 index = self.map_action_to_index(flight_action, aircraft_action) 
                 if index < self.action_space.n:
-                    action_mask[index] = 1
+                    # Only allow logical actions
+                    if self.evaluate_action_impact(flight_action, aircraft_action):
+                        action_mask[index] = 1
 
         # For reactive environment, only allow 0,0 action unless an immediate or imminent conflict with prob==1.00 exists - then use default action mask
         # Check each aircraft for disruptions with probability 1
@@ -1903,6 +2003,231 @@ class AircraftDisruptionEnv(gym.Env):
         flight_action = index // (len(self.aircraft_ids) + 1)
         aircraft_action = index % (len(self.aircraft_ids) + 1)
         return flight_action, aircraft_action
+
+    def evaluate_action_impact(self, flight_action, aircraft_action):
+        """
+        Evaluates the impact of an action to determine if it's logical.
+        
+        Returns True if the action is logical (prioritizes delays over cancellations
+        when both are possible), False otherwise.
+        
+        Args:
+            flight_action (int): The flight action to evaluate
+            aircraft_action (int): The aircraft action to evaluate
+            
+        Returns:
+            bool: True if action is logical, False otherwise
+        """
+        if flight_action == 0:
+            if DEBUG_MODE_ACTION_EVALUATION:
+                print(f"Action evaluation: No action (0,0) - always logical")
+            return True  # No action is always logical
+            
+        if aircraft_action == 0:
+            # Cancellation action - check if delay is possible instead
+            is_necessary = self._is_cancellation_necessary(flight_action)
+            if DEBUG_MODE_ACTION_EVALUATION:
+                print(f"Action evaluation: Cancellation of flight {flight_action} - necessary: {is_necessary}")
+            return is_necessary
+        else:
+            # Rescheduling action - check if it creates new conflicts
+            is_logical = self._is_reschedule_logical(flight_action, aircraft_action)
+            if DEBUG_MODE_ACTION_EVALUATION:
+                print(f"Action evaluation: Reschedule flight {flight_action} to aircraft {aircraft_action} - logical: {is_logical}")
+            return is_logical
+    
+    def _is_cancellation_necessary(self, flight_action):
+        """
+        Checks if cancellation is necessary or if delay is possible.
+        
+        Args:
+            flight_action (int): The flight to check
+            
+        Returns:
+            bool: True if cancellation is necessary, False if delay is possible
+        """
+        if flight_action not in self.rotations_dict:
+            if DEBUG_MODE_ACTION_EVALUATION:
+                print(f"  Cancellation check: Flight {flight_action} not in rotations_dict - necessary")
+            return True  # Flight doesn't exist, cancellation is necessary
+            
+        current_aircraft_id = self.rotations_dict[flight_action]['Aircraft']
+        
+        # Check if the flight can be delayed on the same aircraft
+        aircraft_idx = self.aircraft_id_to_idx[current_aircraft_id] + 1
+        unavail_end = self.state[aircraft_idx, 3]
+        
+        if not np.isnan(unavail_end):
+            # There's an unavailability period - check if flight can be delayed after it
+            flight_info = self.flights_dict[flight_action]
+            original_dep_time = parse_time_with_day_offset(flight_info['DepTime'], self.start_datetime)
+            original_arr_time = parse_time_with_day_offset(flight_info['ArrTime'], self.start_datetime)
+            
+            original_dep_minutes = (original_dep_time - self.earliest_datetime).total_seconds() / 60
+            original_arr_minutes = (original_arr_time - self.earliest_datetime).total_seconds() / 60
+            
+            # If flight can be delayed after unavailability, cancellation is not necessary
+            if original_arr_minutes > unavail_end:
+                if DEBUG_MODE_ACTION_EVALUATION:
+                    print(f"  Cancellation check: Flight {flight_action} can be delayed after unavailability - not necessary")
+                return False  # Delay is possible, cancellation not necessary
+                
+        # Check if flight can be moved to another aircraft
+        for other_aircraft_id in self.aircraft_ids:
+            if other_aircraft_id != current_aircraft_id:
+                if self._can_flight_be_moved_to_aircraft(flight_action, other_aircraft_id):
+                    if DEBUG_MODE_ACTION_EVALUATION:
+                        print(f"  Cancellation check: Flight {flight_action} can be moved to {other_aircraft_id} - not necessary")
+                    return False  # Move is possible, cancellation not necessary
+                    
+        if DEBUG_MODE_ACTION_EVALUATION:
+            print(f"  Cancellation check: Flight {flight_action} has no alternatives - necessary")
+        return True  # No alternatives found, cancellation is necessary
+    
+    def _can_flight_be_moved_to_aircraft(self, flight_id, target_aircraft_id):
+        """
+        Checks if a flight can be moved to a target aircraft without creating conflicts.
+        
+        Args:
+            flight_id (int): The flight to check
+            target_aircraft_id (str): The target aircraft
+            
+        Returns:
+            bool: True if move is possible, False otherwise
+        """
+        if flight_id not in self.flights_dict:
+            return False
+            
+        flight_info = self.flights_dict[flight_id]
+        dep_time = parse_time_with_day_offset(flight_info['DepTime'], self.start_datetime)
+        arr_time = parse_time_with_day_offset(flight_info['ArrTime'], self.start_datetime)
+        
+        dep_minutes = (dep_time - self.earliest_datetime).total_seconds() / 60
+        arr_minutes = (arr_time - self.earliest_datetime).total_seconds() / 60
+        
+        # Check for unavailability conflicts on target aircraft
+        target_aircraft_idx = self.aircraft_id_to_idx[target_aircraft_id] + 1
+        unavail_start = self.state[target_aircraft_idx, 2]
+        unavail_end = self.state[target_aircraft_idx, 3]
+        unavail_prob = self.state[target_aircraft_idx, 1]
+        
+        if not np.isnan(unavail_start) and not np.isnan(unavail_end) and unavail_prob > 0.0:
+            # Check for overlap with unavailability
+            if dep_minutes < unavail_end and arr_minutes > unavail_start:
+                if unavail_prob == 1.0:
+                    return False  # Certain conflict, move not possible
+                # For uncertain conflicts, allow the move (will be resolved later)
+        
+        # Check for conflicts with existing flights on target aircraft
+        for j in range(4, self.columns_state_space - 2, 3):
+            existing_flight_id = self.state[target_aircraft_idx, j]
+            existing_dep = self.state[target_aircraft_idx, j + 1]
+            existing_arr = self.state[target_aircraft_idx, j + 2]
+            
+            if not np.isnan(existing_flight_id) and not np.isnan(existing_dep) and not np.isnan(existing_arr):
+                # Check for overlap
+                if dep_minutes < existing_arr and arr_minutes > existing_dep:
+                    return False  # Conflict with existing flight
+                    
+        return True  # No conflicts found, move is possible
+    
+    def _is_reschedule_logical(self, flight_action, aircraft_action):
+        """
+        Checks if rescheduling a flight to a different aircraft is logical.
+        
+        Args:
+            flight_action (int): The flight to reschedule
+            aircraft_action (int): The target aircraft
+            
+        Returns:
+            bool: True if reschedule is logical, False otherwise
+        """
+        if flight_action not in self.rotations_dict:
+            return False
+            
+        current_aircraft_id = self.rotations_dict[flight_action]['Aircraft']
+        target_aircraft_id = self.aircraft_ids[aircraft_action - 1]
+        
+        # If same aircraft, it's a delay action which is always logical
+        if target_aircraft_id == current_aircraft_id:
+            return True
+            
+        # Check if the move actually resolves a conflict
+        if not self._does_move_resolve_conflict(flight_action, current_aircraft_id, target_aircraft_id):
+            return False
+            
+        # Check if the move creates new conflicts
+        if not self._can_flight_be_moved_to_aircraft(flight_action, target_aircraft_id):
+            return False
+            
+        return True
+    
+    def _does_move_resolve_conflict(self, flight_id, current_aircraft_id, target_aircraft_id):
+        """
+        Checks if moving a flight resolves an existing conflict.
+        
+        Args:
+            flight_id (int): The flight to move
+            current_aircraft_id (str): Current aircraft
+            target_aircraft_id (str): Target aircraft
+            
+        Returns:
+            bool: True if move resolves a conflict, False otherwise
+        """
+        # Check if there's a conflict on the current aircraft
+        current_aircraft_idx = self.aircraft_id_to_idx[current_aircraft_id] + 1
+        unavail_start = self.state[current_aircraft_idx, 2]
+        unavail_end = self.state[current_aircraft_idx, 3]
+        unavail_prob = self.state[current_aircraft_idx, 1]
+        
+        if not np.isnan(unavail_start) and not np.isnan(unavail_end) and unavail_prob > 0.0:
+            flight_info = self.flights_dict[flight_id]
+            dep_time = parse_time_with_day_offset(flight_info['DepTime'], self.start_datetime)
+            arr_time = parse_time_with_day_offset(flight_info['ArrTime'], self.start_datetime)
+            
+            dep_minutes = (dep_time - self.earliest_datetime).total_seconds() / 60
+            arr_minutes = (arr_time - self.earliest_datetime).total_seconds() / 60
+            
+            # Check if flight conflicts with unavailability
+            if dep_minutes < unavail_end and arr_minutes > unavail_start:
+                return True  # Move resolves this conflict
+                
+        return False  # No conflict to resolve
+
+    def _better_alternatives_exist(self, flight_action):
+        """
+        Checks if better alternatives exist for a flight than cancellation.
+        
+        Args:
+            flight_action (int): The flight to check
+            
+        Returns:
+            bool: True if better alternatives exist, False otherwise
+        """
+        if flight_action not in self.rotations_dict:
+            return False
+            
+        current_aircraft_id = self.rotations_dict[flight_action]['Aircraft']
+        
+        # Check if delay is possible on same aircraft
+        aircraft_idx = self.aircraft_id_to_idx[current_aircraft_id] + 1
+        unavail_end = self.state[aircraft_idx, 3]
+        
+        if not np.isnan(unavail_end):
+            flight_info = self.flights_dict[flight_action]
+            original_arr_time = parse_time_with_day_offset(flight_info['ArrTime'], self.start_datetime)
+            original_arr_minutes = (original_arr_time - self.earliest_datetime).total_seconds() / 60
+            
+            if original_arr_minutes > unavail_end:
+                return True  # Delay is possible
+        
+        # Check if move to another aircraft is possible
+        for other_aircraft_id in self.aircraft_ids:
+            if other_aircraft_id != current_aircraft_id:
+                if self._can_flight_be_moved_to_aircraft(flight_action, other_aircraft_id):
+                    return True  # Move is possible
+                    
+        return False  # No better alternatives found
 
 class AircraftDisruptionGreedyReactive(AircraftDisruptionEnv):
     def __init__(self, aircraft_dict, flights_dict, rotations_dict, alt_aircraft_dict, config_dict):

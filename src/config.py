@@ -25,14 +25,14 @@ DUMMY_VALUE = -999  # Dummy value for padding
 RESOLVED_CONFLICT_REWARD = 30000     # Reward for resolving a conflict
 DELAY_MINUTE_PENALTY = 50           # Penalty per minute of delay
 MAX_DELAY_PENALTY = 25000000            # Maximum penalty for delay
-NO_ACTION_PENALTY = 0.2               # Penalty for no action while conflict(s) exist
-CANCELLED_FLIGHT_PENALTY = 5000    # Penalty for cancelling a flight
+NO_ACTION_PENALTY = 10.0               # Penalty for no action while conflict(s) exist (increased from 0.2)
+CANCELLED_FLIGHT_PENALTY = 50000    # Penalty for cancelling a flight (increased from 5000)
 LAST_MINUTE_THRESHOLD = 120           # Threshold for last-minute changes in minutes
 LAST_MINUTE_FLIGHT_PENALTY = 300      # Penalty for last-minute flight changes  
 AHEAD_BONUS_PER_MINUTE = 0.05                # Reward for proactive flight changes
 TIME_MINUTE_PENALTY = 0.1                 # penalty for every minute passed, each timestep cumulatively
 TERMINATION_REWARD = 0                  # Reward for terminating the episode
-TAIL_SWAP_COST = 100
+TAIL_SWAP_COST = 1000             # Penalty for swapping a flight to a different aircraft (increased from 100)
 
 
 # Environment Settings
@@ -52,3 +52,4 @@ DEBUG_MODE_SCHEDULING = False
 DEBUG_MODE_REWARD_LAST_MINUTE_PENALTY = False  # Turn on/off debug mode for reward calculation last minute penalty
 DEBUG_MODE_REWARD_RESOLVED_CONFLICTS = False
 DEBUG_MODE_DELAY_MINUTES = False
+DEBUG_MODE_ACTION_EVALUATION = False  # Turn on/off debug mode for action evaluation and filtering
