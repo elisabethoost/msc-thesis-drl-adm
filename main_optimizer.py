@@ -42,7 +42,7 @@ class AircraftDisruptionExactInference(AircraftDisruptionEnv):
         This method looks ahead until terminal states, keeping only the top 3 paths at each step.
         Returns the first action of the best-performing path.
         """
-        BEAM_WIDTH = 10
+        BEAM_WIDTH = 3  # Reduced from 10 to 3 for better performance
         
         # Get valid actions using the environment's action mask
         action_mask = self.get_action_mask()
@@ -64,9 +64,13 @@ class AircraftDisruptionExactInference(AircraftDisruptionEnv):
         # Track total sequences considered
         total_sequences_considered = 0
         
-        # For first step only, evaluate and print top 10 actions
+        # Add maximum depth limit to prevent excessive exploration
+        max_depth = 10  # Limit search depth to 10 steps
+        max_sequences = 1000  # Limit total sequences considered
+        
+        # For first step only, evaluate and print top 5 actions (reduced from 10)
         if self.step_counter == 1:
-            print("\nTop 10 actions being considered in first step:")
+            print("\nTop 5 actions being considered in first step:")
             action_rewards = []
             for action in valid_actions:
                 env_copy = copy.deepcopy(self)
@@ -74,13 +78,15 @@ class AircraftDisruptionExactInference(AircraftDisruptionEnv):
                 _, reward, _, _, _ = env_copy.step(action)
                 action_rewards.append((action, flight_action, ac_action, reward))
             
-            # Sort by reward and print top 10
+            # Sort by reward and print top 5
             action_rewards.sort(key=lambda x: x[3], reverse=True)
-            for i, (action, flight, ac, reward) in enumerate(action_rewards[:10]):
+            for i, (action, flight, ac, reward) in enumerate(action_rewards[:5]):
                 print(f"{i+1}. Flight {flight}, Aircraft {ac}, Expected Reward: {reward}")
             print()
         
-        while current_beam:
+        depth = 0
+        while current_beam and depth < max_depth and total_sequences_considered < max_sequences:
+            depth += 1
             next_beam = []
             
             # Try extending each path in current beam
@@ -100,11 +106,20 @@ class AircraftDisruptionExactInference(AircraftDisruptionEnv):
                 candidates = []
                 for action in valid_actions:
                     total_sequences_considered += 1
+                    
+                    # Break if we've considered too many sequences
+                    if total_sequences_considered >= max_sequences:
+                        break
+                        
                     env_copy = copy.deepcopy(env_state)
                     _, reward, terminated, _, _ = env_copy.step(action)
                     new_sequence = action_sequence + [action]
                     new_total_reward = total_reward + reward
                     candidates.append((new_sequence, new_total_reward, env_copy, terminated))
+                
+                # Break outer loop if we've considered too many sequences
+                if total_sequences_considered >= max_sequences:
+                    break
                 
                 # Sort candidates by reward and keep top BEAM_WIDTH
                 candidates.sort(key=lambda x: x[1], reverse=True)
@@ -151,7 +166,7 @@ class AircraftDisruptionExactInference(AircraftDisruptionEnv):
             
             # Take the action in the environment
             observation, reward, terminated, truncated, info = self.step(action)
-            print(f"Action result: reward={reward}, terminated={terminated}, something_happened={self.something_happened}, something_happened_testing={self.something_happened_testing}")
+            print(f"Action result: reward={reward}, terminated={terminated}, something_happened={self.something_happened}")
             total_reward += reward
             
             # Record action history

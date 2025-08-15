@@ -6,8 +6,18 @@ import pandas as pd
 import torch
 from datetime import datetime
 from stable_baselines3 import DQN
-from src.environment import AircraftDisruptionEnv
-from scripts.utils import load_scenario_data
+from src.environment import AircraftDisruptionEnv, AircraftDisruptionGreedyReactive
+from scripts.utils import load_scenario_data 
+
+'''
+Steps:
+1. run main.py -> trained models are saved in Save_Trained_Models/
+2. In this script: change the data_folder to the folder of the scenario they want to run inference on. 
+3. run this script -> results are saved in logs/inference_metrics/
+4. run EO_final-results-examples-fixed.py -> results are saved in logs/inference_metrics/comparison_table_detailed.csv
+
+Uses GREEDY REACTIVE BASELINE from environment.py or GREEDY REACTIVE BASELINE from main-optimizer.py
+'''
 
 def run_inference_dqn_single(model_path, scenario_folder, env_type, seed):
     """
@@ -82,6 +92,61 @@ def run_inference_dqn_single(model_path, scenario_folder, env_type, seed):
             scenario_wide_reward_components)
 
 
+def run_exact_single(scenario_folder, env_type):
+    """
+    Runs the greedy reactive baseline on a single scenario and returns the metrics
+    OR runs the exact/optimal solution using beam search on a single scenario and returns the metrics.
+    """
+    start_time = time.time()
+    
+    # Load scenario data first
+    data_dict = load_scenario_data(scenario_folder)
+    aircraft_dict = data_dict['aircraft']
+    flights_dict = data_dict['flights']
+    rotations_dict = data_dict['rotations']
+    alt_aircraft_dict = data_dict['alt_aircraft']
+    config_dict = data_dict['config']
+    
+    # Import the exact inference class from main_optimizer
+    from main_optimizer import AircraftDisruptionExactInference
+    
+    # Initialize optimizer with loaded data
+    # GREEDY REACTIVE BASELINE:
+    if env_type == "greedy_reactive":
+        optimizer = AircraftDisruptionGreedyReactive(
+    # # OPTIMAL EXACT BASELINE:
+    # if env_type == "optimal_exact":
+    #     optimizer = AircraftDisruptionExactInference(
+            aircraft_dict=aircraft_dict,
+            flights_dict=flights_dict,
+            rotations_dict=rotations_dict,
+            alt_aircraft_dict=alt_aircraft_dict,
+            config_dict=config_dict
+        )
+    else:
+        raise ValueError(f"Unknown env_type: {env_type}")
+    
+    solution = optimizer.solve()
+    
+    # Extract metrics from the optimizer
+    total_reward = optimizer.scenario_wide_reward_total
+    total_delays = optimizer.scenario_wide_delay_minutes
+    total_cancelled_flights = optimizer.scenario_wide_cancelled_flights
+    scenario_steps = optimizer.scenario_wide_steps
+    scenario_resolved_conflicts = optimizer.scenario_wide_resolved_conflicts
+    solution_slack = optimizer.scenario_wide_solution_slack
+    scenario_wide_tail_swaps = optimizer.scenario_wide_tail_swaps
+    scenario_wide_actual_disrupted_flights = optimizer.scenario_wide_actual_disrupted_flights
+    scenario_wide_reward_components = optimizer.scenario_wide_reward_components
+
+    end_time = time.time()
+    scenario_time = end_time - start_time
+
+    return (total_reward, total_delays, total_cancelled_flights, scenario_time, 
+            scenario_steps, scenario_resolved_conflicts, solution_slack, 
+            scenario_wide_tail_swaps, scenario_wide_actual_disrupted_flights, 
+            scenario_wide_reward_components)
+
 
 def run_inference_all_models(model_paths, data_folder, seeds, output_file):
     """
@@ -137,10 +202,20 @@ def run_inference_all_models(model_paths, data_folder, seeds, output_file):
                       f"{scenario_name} | {actual_env_type} | seed {seed}")
 
                 try:
-                    (total_reward, total_delays, total_cancelled_flights, scenario_time, 
-                     scenario_steps, scenario_resolved_conflicts, solution_slack, 
-                     scenario_wide_tail_swaps, scenario_wide_actual_disrupted_flights, 
-                     scenario_wide_reward_components) = run_inference_dqn_single(model_path, scenario_folder, actual_env_type, seed)
+                    # GREEDY REACTIVE BASELINE:
+                    # Handle greedy reactive baseline (no model path needed)
+                    if env_type == "greedy_reactive":
+                    # # OPTIMAL EXACT BASELINE:
+                    # if env_type == "optimal_exact":
+                        (total_reward, total_delays, total_cancelled_flights, scenario_time, 
+                         scenario_steps, scenario_resolved_conflicts, solution_slack, 
+                         scenario_wide_tail_swaps, scenario_wide_actual_disrupted_flights, 
+                         scenario_wide_reward_components) = run_exact_single(scenario_folder, env_type)
+                    else:
+                        (total_reward, total_delays, total_cancelled_flights, scenario_time, 
+                         scenario_steps, scenario_resolved_conflicts, solution_slack, 
+                         scenario_wide_tail_swaps, scenario_wide_actual_disrupted_flights, 
+                         scenario_wide_reward_components) = run_inference_dqn_single(model_path, scenario_folder, actual_env_type, seed)
                     
                     results.append({
                         "Scenario": scenario_name,
@@ -189,7 +264,10 @@ if __name__ == "__main__":
     data_folder = "Data/TRAINING/6ac-26-lilac"  # Your training scenario folder
     data_folder_name = data_folder.split("/")[-1]
     
-    # Define model paths - updated for your configuration (both training seeds)
+    # # GREEDY REACTIVE BASELINE
+    # Define model paths - updated for your configuration (both training seeds) + greedy reactive baseline
+    # # OPTIMAL EXACT BASELINE
+    # Define model paths - updated for your configuration (both training seeds) + optimal exact baseline
     model_paths = [
         # Paths based on your main.py configuration - both training seeds
         (os.path.join("Save_Trained_Models", data_folder_name, "myopic_232323.zip"), "myopic_232323"),
@@ -198,10 +276,14 @@ if __name__ == "__main__":
         (os.path.join("Save_Trained_Models", data_folder_name, "myopic_242424.zip"), "myopic_242424"),
         (os.path.join("Save_Trained_Models", data_folder_name, "proactive_242424.zip"), "proactive_242424"),
         (os.path.join("Save_Trained_Models", data_folder_name, "reactive_242424.zip"), "reactive_242424"),
+        # Add greedy reactive baseline
+        ("greedy_reactive", "greedy_reactive"),
+        # # Add optimal exact baseline
+        # ("optimal_exact", "optimal_exact"),
     ]
     
     # Output file - better naming structure
-    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_seeds.csv"
+    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}.csv"
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
