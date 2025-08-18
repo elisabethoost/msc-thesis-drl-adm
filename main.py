@@ -260,9 +260,9 @@ if __name__ == "__main__":
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
     # save_folder = "3-aaa-130-supertje-diverse-with-old-config"
-    save_folder = "6ac-20-lilac-deterministic-11-07"
+    save_folder = "Save_Trained_Models"
     # TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
-    TESTING_FOLDER_PATH = "Data\TRAINING\6ac-20-lilac"
+    TESTING_FOLDERS_PATH = "Data/TRAINING/6ac-26-lilac/"
 
     # Define environment types
     env_types = ['myopic', 'proactive', 'reactive']
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     # all_folders_temp = ["data/Example/"] 
     all_folders_temp = [
-        "Data\TRAINING\6ac-13-mauve"
+        "Data/TRAINING/6ac-26-lilac/"
 
         # "Data\TRAINING\6ac-13-mauve",
         # "Data/TRAINING/6ac-20-lilac/", 
