@@ -12,9 +12,11 @@ from scripts.utils import load_scenario_data
 '''
 Steps:
 1. run main.py -> trained models are saved in Save_Trained_Models/
-2. In this script: change the data_folder to the folder of the scenario they want to run inference on. 
-3. run this script -> results are saved in logs/inference_metrics/
-4. run EO_final-results-examples-fixed.py -> results are saved in logs/inference_metrics/comparison_table_detailed.csv
+2. In this script: change the data_folder to the TEST DATA folder
+3. change the training_folder_name to the TRAINING DATA folder
+4. change output_file to the name of the file you want to save the results to
+5. run this script -> results are saved in logs/inference_metrics/
+6. run EO_final-results-examples-fixed.py -> results are saved in logs/inference_metrics/comparison_table_detailed.csv
 
 Uses GREEDY REACTIVE BASELINE from environment.py or GREEDY REACTIVE BASELINE from main-optimizer.py
 '''
@@ -162,7 +164,7 @@ def run_inference_all_models(model_paths, data_folder, seeds, output_file):
         pd.DataFrame: A DataFrame containing scenario, model, seed, and metrics.
     """
     
-    # Identify all scenario folders within data_folder
+    # Identify all scenario folders within data_folder (TEST DATA)
     scenario_folders = [
         os.path.join(data_folder, folder)
         for folder in os.listdir(data_folder)
@@ -257,25 +259,25 @@ def run_inference_all_models(model_paths, data_folder, seeds, output_file):
 
 if __name__ == "__main__":
     # Configuration
-    # For testing: use fewer seeds first
-    seeds = list(range(1, 6))  # 5 seeds for testing (change to list(range(1, 101)) for full run)
+    # For trying: use fewer seeds first
+    seeds = list(range(1, 6))  # 5 seeds for trying (change to list(range(1, 101)) for full run)
     
-    # Define your scenario folder (testing data)
-    data_folder = "Data/TRAINING/6ac-26-lilac"  # Your training scenario folder
+    # Test data folder (scenarios to test on)
+    data_folder = "Data/TRAINING/6ac-26-lilac"  # Your TESTING DATA
     data_folder_name = data_folder.split("/")[-1]
+
+    # Training folder name (for loading trained models)
+    training_folder_name = "6ac-65-yellow"  
     
-    # # GREEDY REACTIVE BASELINE
-    # Define model paths - updated for your configuration (both training seeds) + greedy reactive baseline
-    # # OPTIMAL EXACT BASELINE
-    # Define model paths - updated for your configuration (both training seeds) + optimal exact baseline
+    # Model paths (point to trained models)
     model_paths = [
         # Paths based on your main.py configuration - both training seeds
-        (os.path.join("Save_Trained_Models", data_folder_name, "myopic_232323.zip"), "myopic_232323"),
-        (os.path.join("Save_Trained_Models", data_folder_name, "proactive_232323.zip"), "proactive_232323"),
-        (os.path.join("Save_Trained_Models", data_folder_name, "reactive_232323.zip"), "reactive_232323"),
-        (os.path.join("Save_Trained_Models", data_folder_name, "myopic_242424.zip"), "myopic_242424"),
-        (os.path.join("Save_Trained_Models", data_folder_name, "proactive_242424.zip"), "proactive_242424"),
-        (os.path.join("Save_Trained_Models", data_folder_name, "reactive_242424.zip"), "reactive_242424"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "myopic_232323.zip"), "myopic_232323"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "proactive_232323.zip"), "proactive_232323"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "reactive_232323.zip"), "reactive_232323"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "myopic_242424.zip"), "myopic_242424"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "proactive_242424.zip"), "proactive_242424"),
+        (os.path.join("Save_Trained_Models", training_folder_name, "reactive_242424.zip"), "reactive_242424"),
         # Add greedy reactive baseline
         ("greedy_reactive", "greedy_reactive"),
         # # Add optimal exact baseline
@@ -283,7 +285,8 @@ if __name__ == "__main__":
     ]
     
     # Output file - better naming structure
-    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}.csv"
+    # output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_greedy_reactive.csv"
+    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_trying.csv"
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

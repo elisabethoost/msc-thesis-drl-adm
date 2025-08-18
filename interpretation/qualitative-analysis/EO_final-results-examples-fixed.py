@@ -6,8 +6,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 '''
 Steps:
-1. run the script normally to obtain the comparison table as a csv file in logs/inference_metrics/
-2. run this command if you want to see the output as txt file: python interpretation/qualitative-analysis/EO_final-results-examples-fixed.py > output.txt 2>&1
+1. change latest_folder = "scenario_folder_scenario_76.json" to the scenario in logs/scenarios/ 
+corresponds to your TEST DATA
+2. change this too: results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}_seeds.csv"))
+3. check if results_df is correct (same as output_file in run_inference.py)
+4. run the script normally to obtain the comparison table as a csv file in logs/inference_metrics/
+5. run this command if you want to see the output as txt file: python interpretation/qualitative-analysis/EO_final-results-examples-fixed.py > output.txt 2>&1
+6. change the seeds to 101 if you want (takes longer but better results)
+
+Uses GREEDY REACTIVE BASELINE from environment.py or GREEDY REACTIVE BASELINE from main-optimizer.py
 '''
 # Set up the environment
 sns.set_theme(style="darkgrid")
@@ -129,6 +136,7 @@ def extract_disruption_stats(scenario_data):
 # Path to the scenarios folder
 scenario_folder_path = "logs/scenarios/"
 latest_folder = "scenario_folder_scenario_76.json" # Training/6ac-26-lilac
+# latest_folder = "scenario_folder_scenario_77.json" # Testing/6ac-65-yellow
 
 file_path = os.path.join(scenario_folder_path, latest_folder)
 
@@ -171,7 +179,7 @@ print(scenarios_df)
 # Load and process inference results
 scenario_folder_path = "logs/inference_metrics/"
 # unpack results_df
-results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}.csv"))
+results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}_trying.csv"))
 
 # Merge scenario-level info from scenarios_df into results_df
 merged_df = results_df.merge(scenarios_df, on='Scenario', how='left')
@@ -191,11 +199,11 @@ merged_df["ScenarioCategory"] = merged_df["Scenario"].apply(
 # Sort models in desired order - FIXED VERSION
 def extract_model_type(model_name):
     # """Extract model type with proper handling for greedy_reactive"""
-    # if model_name == 'greedy_reactive':
-    #     return 'greedy_reactive'
-    """Extract model type with proper handling for optimal_exact"""
-    if model_name == 'optimal_exact':
-        return 'optimal_exact'
+    if model_name == 'greedy_reactive':
+        return 'greedy_reactive'
+    # """Extract model type with proper handling for optimal_exact"""
+    # if model_name == 'optimal_exact':
+    #     return 'optimal_exact'
     elif 'proactive' in model_name:
         return 'proactive'
     elif 'myopic' in model_name:
@@ -217,8 +225,8 @@ merged_df['Model'] = merged_df['Model'].apply(lambda x:
     'DQN Proactive-U' if x.startswith('proactive') else
     'DQN Proactive-N' if x.startswith('myopic') else 
     'DQN Reactive' if x.startswith('reactive') else
-    # 'Greedy Reactive' if x.startswith('greedy_reactive') else
-    'Optimal Exact' if x.startswith('optimal_exact') else
+    'Greedy Reactive' if x.startswith('greedy_reactive') else
+    # 'Optimal Exact' if x.startswith('optimal_exact') else
     x
 )
 
@@ -261,8 +269,8 @@ model_colors = {
     'DQN Proactive-U': ('orange', 'DQN Proactive-U'),
     'DQN Proactive-N': ('blue', 'DQN Proactive-N'),
     'DQN Reactive': ('green', 'DQN Reactive'),
-    # 'Greedy Reactive': ('darkgrey', 'Greedy Reactive')
-    'Optimal Exact': ('darkgrey', 'Optimal Exact')
+    'Greedy Reactive': ('darkgrey', 'Greedy Reactive')
+    # 'Optimal Exact': ('darkgrey', 'Optimal Exact')
 }
 
 # First aggregate by Model and Seed, then calculate mean and std across seeds
@@ -297,9 +305,9 @@ comparison_table = (
 
 # Sort the comparison table according to specified order
 # GREEDY REACTIVE BASELINE:
-# model_order = ['Greedy Reactive', 'DQN Reactive', 'DQN Proactive-N', 'DQN Proactive-U']
+model_order = ['Greedy Reactive', 'DQN Reactive', 'DQN Proactive-N', 'DQN Proactive-U']
 # OPTIMAL EXACT BASELINE:
-model_order = ['Optimal Exact', 'DQN Reactive', 'DQN Proactive-N', 'DQN Proactive-U']
+# model_order = ['Optimal Exact', 'DQN Reactive', 'DQN Proactive-N', 'DQN Proactive-U']
 comparison_table = comparison_table.reindex(model_order)
 
 print("Comparison of Models Across All Scenarios:")
@@ -340,3 +348,68 @@ for model in model_order:
 comparison_csv_path = "logs/inference_metrics/comparison_table_detailed_1.csv"
 comparison_table.to_csv(comparison_csv_path)
 print(f"\nDetailed comparison table saved to: {comparison_csv_path}")
+
+
+
+'''
+----------------------------------------------------
+----------------------------------------------------
+Plot is next 
+----------------------------------------------------
+----------------------------------------------------
+'''
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Create bar plot with error bars
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 6))
+
+# Define desired order of models
+model_order = ['DQN Proactive-U', 'DQN Proactive-N', 'DQN Reactive', 'Greedy Reactive']
+
+# Define model colors and order
+model_colors = {
+    'DQN Proactive-U': ('orange', 'DQN Proactive-U'),
+    'DQN Proactive-N': ('blue', 'DQN Proactive-N'),
+    'DQN Reactive': ('green', 'DQN Reactive'),
+    'Greedy Reactive': ('darkgrey', 'Greedy Reactive')
+}
+# Sort comparison table by desired order
+sorted_models = sorted(comparison_table.index, 
+                      key=lambda x: model_order.index(model_colors[x][1]))
+
+x = range(len(sorted_models))
+width = 0.6
+
+# Plot reward bars using model colors in specified order
+for i, model in enumerate(sorted_models):
+    print(model)
+    color = model_colors[model][0]  # Get color from model_colors dictionary
+    label = model_colors[model][1]  # Get label from model_colors dictionary
+    ax1.bar(i, comparison_table.loc[model, 'Mean_Reward'], width,
+            yerr=comparison_table.loc[model, 'Std_Reward'],
+            capsize=5, label=label, color=color)
+
+ax1.set_ylabel('Mean total reward')
+ax1.set_title('Inference reward')
+ax1.set_xticks([])
+ax1.axhline(y=0, color='#404040', linewidth=1)  # Add darker gray horizontal line
+
+# Plot runtime bars
+for i, model in enumerate(sorted_models):
+    color = model_colors[model][0]  # Get color from model_colors dictionary
+    label = model_colors[model][1]  # Get label from model_colors dictionary
+    ax2.bar(i, comparison_table.loc[model, 'Mean_Runtime'], width,
+            yerr=comparison_table.loc[model, 'Std_Runtime'],
+            capsize=5, color=color)  # Removed label here since we only want one legend
+
+ax2.set_ylabel('Mean runtime (minutes)')
+ax2.set_title('Runtime')
+ax2.set_xticks([])
+ax2.axhline(y=0, color='#404040', linewidth=1)  # Add darker gray horizontal line
+
+# Add legend centered below the plots with 2 columns
+fig.legend(ncol=4, bbox_to_anchor=(0.5, -0.05), loc='center')
+
+plt.tight_layout()
+plt.show()
