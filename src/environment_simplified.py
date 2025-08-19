@@ -1346,23 +1346,18 @@ class AircraftDisruptionEnv(gym.Env):
         if DEBUG_MODE_REWARD and self.tail_swap_happened:
             print(f"  -{tail_swap_penalty} penalty for tail swap")
         
-        # 8. Efficiency Bonus: Reward for efficient conflict resolution
+        # 8. Efficiency Bonus: Reward for efficient conflict resolution (SIMPLIFIED)
         efficiency_bonus = 0
         if flight_action != 0 and aircraft_action != 0:
-            # Bonus for resolving conflicts with minimal impact
-            if len(resolved_conflicts) > 0 and delay_penalty_minutes < 100:  # Small delay
-                efficiency_bonus = len(resolved_conflicts) * 1000  # 1000 per resolved conflict
+            # Simple bonus for resolving conflicts
+            if len(resolved_conflicts) > 0:
+                efficiency_bonus = len(resolved_conflicts) * 500  # Reduced from 1000
                 if DEBUG_MODE_REWARD:
-                    print(f"  +{efficiency_bonus} efficiency bonus for resolving {len(resolved_conflicts)} conflicts with minimal delay")
+                    print(f"  +{efficiency_bonus} efficiency bonus for resolving {len(resolved_conflicts)} conflicts")
         
-        # 9. Alternative Solution Penalty: Penalty for not considering better alternatives
+        # 9. Alternative Solution Penalty: Penalty for not considering better alternatives (SIMPLIFIED)
         alternative_penalty = 0
-        if flight_action != 0 and aircraft_action == 0:  # Cancellation action
-            # Check if there were better alternatives available
-            if self._better_alternatives_exist(flight_action):
-                alternative_penalty = 2000  # Penalty for not using better alternatives
-                if DEBUG_MODE_REWARD:
-                    print(f"  -{alternative_penalty} penalty for not using better alternatives")
+        # Removed overly complex alternative checking for simplified version
         
         # Reset tail swap tracking for next step
         self.tail_swap_happened = False
@@ -2008,8 +2003,8 @@ class AircraftDisruptionEnv(gym.Env):
         """
         Evaluates the impact of an action to determine if it's logical.
         
-        Returns True if the action is logical (prioritizes delays over cancellations
-        when both are possible), False otherwise.
+        SIMPLIFIED VERSION: Allows all actions to prevent over-restriction.
+        The agent should learn which actions are better through rewards.
         
         Args:
             flight_action (int): The flight action to evaluate
@@ -2023,18 +2018,25 @@ class AircraftDisruptionEnv(gym.Env):
                 print(f"Action evaluation: No action (0,0) - always logical")
             return True  # No action is always logical
             
-        if aircraft_action == 0:
-            # Cancellation action - check if delay is possible instead
-            is_necessary = self._is_cancellation_necessary(flight_action)
-            if DEBUG_MODE_ACTION_EVALUATION:
-                print(f"Action evaluation: Cancellation of flight {flight_action} - necessary: {is_necessary}")
-            return is_necessary
-        else:
-            # Rescheduling action - check if it creates new conflicts
-            is_logical = self._is_reschedule_logical(flight_action, aircraft_action)
-            if DEBUG_MODE_ACTION_EVALUATION:
-                print(f"Action evaluation: Reschedule flight {flight_action} to aircraft {aircraft_action} - logical: {is_logical}")
-            return is_logical
+        # SIMPLIFIED: Allow all actions to prevent over-restriction
+        # The agent should learn which actions are better through rewards
+        if DEBUG_MODE_ACTION_EVALUATION:
+            print(f"Action evaluation: Allowing action (flight={flight_action}, aircraft={aircraft_action})")
+        return True
+        
+        # ORIGINAL RESTRICTIVE LOGIC (commented out for comparison):
+        # if aircraft_action == 0:
+        #     # Cancellation action - check if delay is possible instead
+        #     is_necessary = self._is_cancellation_necessary(flight_action)
+        #     if DEBUG_MODE_ACTION_EVALUATION:
+        #         print(f"Action evaluation: Cancellation of flight {flight_action} - necessary: {is_necessary}")
+        #     return is_necessary
+        # else:
+        #     # Rescheduling action - check if it creates new conflicts
+        #     is_logical = self._is_reschedule_logical(flight_action, aircraft_action)
+        #     if DEBUG_MODE_ACTION_EVALUATION:
+        #         print(f"Action evaluation: Reschedule flight {flight_action} to aircraft {aircraft_action} - logical: {is_logical}")
+        #     return is_logical
     
     def _is_cancellation_necessary(self, flight_action):
         """

@@ -3,7 +3,7 @@ import os
 import time
 import subprocess
 import sys
-import src.config as config
+import src.config_fixed as config
 import pandas as pd
 from train_dqn_modular import run_train_dqn_both_timesteps
 import numpy as np
@@ -252,8 +252,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(1e4)  # 100,000 timesteps for testing
+    MAX_TOTAL_TIMESTEPS = int(5e4)  # 50,000 timesteps for proper training
     SEEDS = [232323, 242424]
+    # SEEDS = [232323]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
