@@ -1,7 +1,35 @@
-2025-08-18 13:04:03 - INFO - Logging system initialized
-2025-08-18 13:09:04 - INFO - System health check at 10000 timesteps:
-2025-08-18 13:09:04 - INFO -   - CPU Usage: 98.9%
-2025-08-18 13:09:04 - INFO -   - Memory Usage: 73.4%
-2025-08-18 13:09:04 - INFO - Training progress:
-2025-08-18 13:09:04 - INFO -   - Current episode: 50
-2025-08-18 13:09:04 - INFO -   - Current epsilon: 0.0250
+2025-08-19 17:10:48 - INFO - Logging system initialized
+2025-08-19 17:15:08 - INFO - System health check at 10000 timesteps:
+2025-08-19 17:15:08 - INFO -   - CPU Usage: 100.0%
+2025-08-19 17:15:08 - INFO -   - Memory Usage: 76.6%
+2025-08-19 17:15:08 - INFO - Training progress:
+2025-08-19 17:15:08 - INFO -   - Current episode: 52
+2025-08-19 17:15:08 - INFO -   - Current epsilon: 0.7429
+2025-08-19 17:19:52 - INFO - System health check at 20000 timesteps:
+2025-08-19 17:19:52 - INFO -   - CPU Usage: 100.0%
+2025-08-19 17:19:52 - INFO -   - Memory Usage: 77.2%
+2025-08-19 17:19:52 - INFO - Training progress:
+2025-08-19 17:19:52 - INFO -   - Current episode: 102
+2025-08-19 17:19:52 - INFO -   - Current epsilon: 0.4857
+2025-08-19 17:24:33 - INFO - System health check at 30000 timesteps:
+2025-08-19 17:24:33 - INFO -   - CPU Usage: 100.0%
+2025-08-19 17:24:33 - INFO -   - Memory Usage: 77.8%
+2025-08-19 17:24:33 - INFO - Training progress:
+2025-08-19 17:24:33 - INFO -   - Current episode: 151
+2025-08-19 17:24:33 - INFO -   - Current epsilon: 0.2286
+2025-08-19 17:29:06 - INFO - System health check at 40000 timesteps:
+2025-08-19 17:29:06 - INFO -   - CPU Usage: 100.0%
+2025-08-19 17:29:06 - INFO -   - Memory Usage: 78.0%
+2025-08-19 17:29:06 - INFO - Training progress:
+2025-08-19 17:29:06 - INFO -   - Current episode: 200
+2025-08-19 17:29:06 - INFO -   - Current epsilon: 0.1000
+2025-08-19 17:33:37 - INFO - System health check at 50000 timesteps:
+2025-08-19 17:33:37 - INFO -   - CPU Usage: 100.0%
+2025-08-19 17:33:37 - INFO -   - Memory Usage: 77.9%
+2025-08-19 17:33:37 - INFO - Training progress:
+2025-08-19 17:33:37 - INFO -   - Current episode: 249
+2025-08-19 17:33:37 - INFO -   - Current epsilon: 0.1000
+2025-08-19 17:33:37 - INFO - Regular checkpoint at 50000 timesteps
+2025-08-19 17:33:37 - INFO - Saving checkpoint...
+2025-08-19 17:33:38 - INFO - Checkpoint saved at Save_Trained_Models\training_monitor\checkpoints\myopic_242424_checkpoint.pt
+2025-08-19 17:33:39 - INFO - Checkpoint saved at Save_Trained_Models\training_monitor\checkpoints\myopic_242424_checkpoint.pt

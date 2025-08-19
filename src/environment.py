@@ -3,7 +3,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from datetime import datetime, timedelta
-from src.config import *
+from src.config_fixed import *
 from scripts.utils import *
 import time
 import random
@@ -1183,7 +1183,7 @@ class AircraftDisruptionEnv(gym.Env):
                 current_time = new_arr_time
             else:
                 current_time = arr_time
-
+        
     def cancel_flight(self, flight_id):
         """Cancels the specified flight.
 
@@ -1960,7 +1960,7 @@ class AircraftDisruptionEnv(gym.Env):
                                     # print(f"*** earliest disrupted dep: {earliest_disrupted_dep} of flight {flight_id}")
 
             # Allow reactive action if approaching either critical time
-            current_time_minutes = (self.current_datetime - self.start_datetime).total_seconds() / 60
+            # Use consistent time calculation
             earliest_critical_time = min(earliest_disrupted_dep, earliest_disruption_start)
             
             if current_time_minutes + self.timestep_minutes >= earliest_critical_time:

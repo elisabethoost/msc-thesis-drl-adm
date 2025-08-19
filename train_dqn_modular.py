@@ -1,4 +1,5 @@
 print("Starting imports...")
+print("FIXED VERSION - Using improved hyperparameters and reward scaling")
 import sys
 print(f"Python path: {sys.path}")
 print("Importing torch...")
@@ -19,7 +20,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from scripts.utils import *
 from scripts.visualizations import *
-from src.config import *
+from src.config_fixed import *
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
@@ -59,23 +60,23 @@ def run_train_dqn_both_timesteps(
 
     # Constants and Training Settings
     # correspond to parameters used in the standard Deep Q-Network (DQN) algorithm & loss function
-    LEARNING_RATE = 0.0001                   # alpha in the Q function
-    GAMMA = 0.9999                           # Discount factor for future rewards
-    BUFFER_SIZE = 1000                       # Size of the experience replay buffer, D
-    BATCH_SIZE = 64                          # Number of samples
-    TARGET_UPDATE_INTERVAL = 50              # How often to update the target network
-    NEURAL_NET_STRUCTURE = dict(net_arch=[64, 64])  # Architecture of the Q-network, Q(s,a;θ).
+    LEARNING_RATE = 0.00001                  # Reduced from 0.0001 (10x smaller) - alpha in the Q function
+    GAMMA = 0.99                            # Reduced from 0.9999 (more realistic) - Discount factor for future rewards
+    BUFFER_SIZE = 10000                     # Increased from 1000 (10x larger) - Size of the experience replay buffer, D
+    BATCH_SIZE = 128                        # Increased from 64 (2x larger) - Number of samples
+    TARGET_UPDATE_INTERVAL = 100            # Increased from 50 (2x larger) - How often to update the target network
+    NEURAL_NET_STRUCTURE = dict(net_arch=[128, 128])  # Larger network - Architecture of the Q-network, Q(s,a;θ).
 
-    LEARNING_STARTS = 0                      # Number of steps before training starts
-    TRAIN_FREQ = 4                           # How often to train the Q-network
+    LEARNING_STARTS = 1000                  # Increased from 0 (allow buffer to fill) - Number of steps before training starts
+    TRAIN_FREQ = 1                          # Reduced from 4 (train more frequently) - How often to train the Q-network
 
     # Exploration parameters. epsilon-greedy exploration. exploration (random) vs exploitation (greedy).
     EPSILON_START = 1.0                      # Starts with 100% random exploration at the beginning of training
-    EPSILON_MIN = 0.025                      # Minimum exploration rate (Doesn't let ε drop below 2.5% — there’s always some randomness to encourage continued exploration.)
-    PERCENTAGE_MIN = 85                      # Decay epsilon from 1.0 to 0.025 over the first 85% of training timesteps
-    EPSILON_TYPE = "exponential"             # Type of exploration rate decay
+    EPSILON_MIN = 0.1                       # Increased from 0.025 (more exploration) - Minimum exploration rate
+    PERCENTAGE_MIN = 70                     # Reduced from 85 (slower decay) - Decay epsilon from 1.0 to 0.1 over the first 70% of training timesteps
+    EPSILON_TYPE = "linear"                 # Changed from exponential to linear - Type of exploration rate decay
     if EPSILON_TYPE == "linear":
-        EPSILON_MIN = 0
+        EPSILON_MIN = 0.1
 
     N_EPISODES = 10                         # Reduced from 50
 
@@ -124,7 +125,7 @@ def run_train_dqn_both_timesteps(
     # create_new_id creates a new ID for the training run and adds it to the ids.json file
     # each time you run the main script, a new ID is created
     from scripts.logger import create_new_id, get_config_variables
-    import src.config as config
+    import src.config_fixed as config  # Use the fixed config instead of the original
 
     all_logs = {}
     def train_dqn_agent(env_type, seed):
@@ -213,7 +214,7 @@ def run_train_dqn_both_timesteps(
                 alt_aircraft_dict = data_dict['alt_aircraft']
                 config_dict = data_dict['config']
 
-                from src.environment import AircraftDisruptionEnv
+                from src.environment_simplified import AircraftDisruptionEnv
                 env = AircraftDisruptionEnv(
                     aircraft_dict,
                     flights_dict,
@@ -294,7 +295,7 @@ def run_train_dqn_both_timesteps(
         config_dict = data_dict['config']
 
         # initialize the environment
-        from src.environment import AircraftDisruptionEnv
+        from src.environment_simplified import AircraftDisruptionEnv
         env = AircraftDisruptionEnv(
             aircraft_dict,
             flights_dict,
@@ -465,7 +466,12 @@ def run_train_dqn_both_timesteps(
 
                     obs = obs_next
 
-                    epsilon = max(EPSILON_MIN, epsilon * (1 - EPSILON_DECAY_RATE))
+                    # FIXED: Use linear epsilon decay instead of exponential
+                    if EPSILON_TYPE == "linear":
+                        progress = total_timesteps / (MAX_TOTAL_TIMESTEPS * PERCENTAGE_MIN / 100)
+                        epsilon = max(EPSILON_MIN, EPSILON_START - progress * (EPSILON_START - EPSILON_MIN))
+                    else:
+                        epsilon = max(EPSILON_MIN, epsilon * (1 - EPSILON_DECAY_RATE))
                     epsilon_values.append((episode + 1, epsilon))
 
                     timesteps_local += 1
