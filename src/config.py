@@ -25,14 +25,34 @@ DUMMY_VALUE = -999  # Dummy value for padding
 RESOLVED_CONFLICT_REWARD = 30000     # Reward for resolving a conflict
 DELAY_MINUTE_PENALTY = 50           # Penalty per minute of delay
 MAX_DELAY_PENALTY = 25000000            # Maximum penalty for delay
-NO_ACTION_PENALTY = 10.0               # Penalty for no action while conflict(s) exist (increased from 0.2)
+NO_ACTION_PENALTY = 0.2              # Penalty for no action while conflict(s) exist
+#  NO_ACTION_PENALTY = 10 
 CANCELLED_FLIGHT_PENALTY = 50000    # Penalty for cancelling a flight (increased from 5000)
 LAST_MINUTE_THRESHOLD = 120           # Threshold for last-minute changes in minutes
 LAST_MINUTE_FLIGHT_PENALTY = 300      # Penalty for last-minute flight changes  
 AHEAD_BONUS_PER_MINUTE = 0.05                # Reward for proactive flight changes
 TIME_MINUTE_PENALTY = 0.1                 # penalty for every minute passed, each timestep cumulatively
 TERMINATION_REWARD = 0                  # Reward for terminating the episode
-TAIL_SWAP_COST = 1000             # Penalty for swapping a flight to a different aircraft (increased from 100)
+TAIL_SWAP_COST = 100             # Penalty for swapping a flight to a different aircraft
+
+'''
+
+# FIXED Reward and Penalty Values - SCALED DOWN BY 100x
+# This should help with the learning stability
+RESOLVED_CONFLICT_REWARD = 300     # Reduced from 30000 (100x smaller)
+DELAY_MINUTE_PENALTY = 0.5         # Reduced from 50 (100x smaller)
+MAX_DELAY_PENALTY = 250000         # Reduced from 25000000 (100x smaller)
+NO_ACTION_PENALTY = 0.2            # Reduced from 10.0 (100x smaller)
+CANCELLED_FLIGHT_PENALTY = 500     # Reduced from 50000 (100x smaller)
+LAST_MINUTE_THRESHOLD = 120        # Threshold for last-minute changes in minutes
+LAST_MINUTE_FLIGHT_PENALTY = 3     # Reduced from 300 (100x smaller)
+AHEAD_BONUS_PER_MINUTE = 0.0005    # Reduced from 0.05 (100x smaller)
+TIME_MINUTE_PENALTY = 0.001        # Reduced from 0.1 (100x smaller)
+TERMINATION_REWARD = 0             # Reward for terminating the episode
+TAIL_SWAP_COST = 10                # Reduced from 1000 (100x smaller)
+
+
+'''
 
 
 # Environment Settings

@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from scripts.utils import *
 from scripts.visualizations import *
-from src.config_fixed import *
+from src.config import *
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
@@ -125,7 +125,7 @@ def run_train_dqn_both_timesteps(
     # create_new_id creates a new ID for the training run and adds it to the ids.json file
     # each time you run the main script, a new ID is created
     from scripts.logger import create_new_id, get_config_variables
-    import src.config_fixed as config  # Use the fixed config instead of the original
+    import src.config as config  # Use the fixed config instead of the original
 
     all_logs = {}
     def train_dqn_agent(env_type, seed):

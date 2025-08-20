@@ -3,7 +3,7 @@ import os
 import time
 import subprocess
 import sys
-import src.config_fixed as config
+import src.config as config
 import pandas as pd
 from train_dqn_modular import run_train_dqn_both_timesteps
 import numpy as np
@@ -254,15 +254,12 @@ if __name__ == "__main__":
     # Common configuration
     MAX_TOTAL_TIMESTEPS = int(5e4)  # 50,000 timesteps for proper training
     SEEDS = [232323, 242424]
-    # SEEDS = [232323]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    # save_folder = "3-aaa-130-supertje-diverse-with-old-config"
     save_folder = "Save_Trained_Models"
-    # TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
     TESTING_FOLDERS_PATH = "Data/TRAINING/6ac-26-lilac/"
 
     # Define environment types
@@ -271,18 +268,11 @@ if __name__ == "__main__":
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
-    # all_folders_temp = [
-    #     "data/Example/Example-scenario-1/"
-    # ]
-
-    # all_folders_temp = ["data/Example/"] 
     all_folders_temp = [
         "Data/TRAINING/6ac-26-lilac/"
-
-        # "Data\TRAINING\6ac-13-mauve",
-        # "Data/TRAINING/6ac-20-lilac/", 
+        # "Data\TRAINING\6ac-13-mauve"
+        # "Data/TRAINING/6ac-20-lilac/" 
         # "Data\TRAINING\6ac-65-yellow"  
-      
         ]
 
     # main.py considers 3 different scenarios: 
