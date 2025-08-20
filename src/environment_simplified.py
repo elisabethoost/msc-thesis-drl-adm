@@ -3,7 +3,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from datetime import datetime, timedelta
-from src.config_fixed import *
+from src.config import *
 from scripts.utils import *
 import time
 import random
