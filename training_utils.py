@@ -159,8 +159,8 @@ class TrainingMonitor:
             self._log_message("WARNING", f"High memory usage detected: {metrics['memory_percent']}%")
             should_save = True
             
-        # Save checkpoint at regular intervals (every 200,000 timesteps)
-        if total_timesteps % 200000 == 0:
+        # Save checkpoint at regular intervals (every 50,000 timesteps)
+        if total_timesteps % 50000 == 0:
             self._log_message("INFO", f"Regular checkpoint at {total_timesteps} timesteps")
             should_save = True
             
@@ -185,7 +185,7 @@ class TrainingMonitor:
                 'test_rewards': test_rewards,
                 'epsilon_values': epsilon_values,
                 'epsilon': epsilon,
-                # 'replay_buffer': model.replay_buffer,  # Removed to reduce file size
+                'replay_buffer': model.replay_buffer,
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -207,15 +207,49 @@ class TrainingMonitor:
         """Load a checkpoint if it exists"""
         checkpoint_path = os.path.join(self.checkpoint_dir, f"{self.env_type}_{self.single_seed}_checkpoint.pt")
         if os.path.exists(checkpoint_path):
-            self._log_message("INFO", f"Loading checkpoint from {checkpoint_path}")
-            checkpoint = th.load(checkpoint_path)
-            model.q_net.load_state_dict(checkpoint['model_state_dict'])
-            model.policy.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            # model.replay_buffer = checkpoint['replay_buffer']  # Removed since we no longer save it
-            return (checkpoint['total_timesteps'], 
-                    checkpoint['episode'],
-                    checkpoint['rewards'],
-                    checkpoint['test_rewards'],
-                    checkpoint['epsilon_values'],
-                    checkpoint['epsilon'])
+            try:
+                self._log_message("INFO", f"Loading checkpoint from {checkpoint_path}")
+                checkpoint = th.load(checkpoint_path)
+                
+                # Check if the checkpoint architecture matches the current model
+                checkpoint_state_dict = checkpoint['model_state_dict']
+                current_state_dict = model.q_net.state_dict()
+                
+                # Check for architecture mismatch
+                architecture_mismatch = False
+                for key in checkpoint_state_dict.keys():
+                    if key in current_state_dict:
+                        if checkpoint_state_dict[key].shape != current_state_dict[key].shape:
+                            architecture_mismatch = True
+                            self._log_message("WARNING", f"Architecture mismatch detected for {key}: checkpoint shape {checkpoint_state_dict[key].shape} vs current shape {current_state_dict[key].shape}")
+                            break
+                
+                if architecture_mismatch:
+                    self._log_message("WARNING", "Checkpoint architecture doesn't match current model. Starting fresh training.")
+                    # Optionally backup the old checkpoint
+                    backup_path = checkpoint_path + ".backup"
+                    try:
+                        import shutil
+                        shutil.copy2(checkpoint_path, backup_path)
+                        self._log_message("INFO", f"Old checkpoint backed up to {backup_path}")
+                    except Exception as e:
+                        self._log_message("WARNING", f"Failed to backup old checkpoint: {str(e)}")
+                    return None
+                
+                # Load the checkpoint if architecture matches
+                model.q_net.load_state_dict(checkpoint['model_state_dict'])
+                model.policy.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                model.replay_buffer = checkpoint['replay_buffer']
+                self._log_message("INFO", "Checkpoint loaded successfully")
+                return (checkpoint['total_timesteps'], 
+                        checkpoint['episode'],
+                        checkpoint['rewards'],
+                        checkpoint['test_rewards'],
+                        checkpoint['epsilon_values'],
+                        checkpoint['epsilon'])
+                        
+            except Exception as e:
+                self._log_message("ERROR", f"Failed to load checkpoint: {str(e)}")
+                self._log_message("INFO", "Starting fresh training due to checkpoint loading error")
+                return None
         return None 
