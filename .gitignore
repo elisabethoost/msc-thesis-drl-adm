@@ -47,3 +47,8 @@ results/*/plots/reward-plots-per-scenario/
 
 logs/training/*
 logs/*
+
+# Ignore large checkpoint files
+Save_Trained_Models/training_monitor/checkpoints/*.pt
+Save_Trained_Models/*/checkpoints/*.pt
+*.pt
