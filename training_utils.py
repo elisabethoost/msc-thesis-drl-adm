@@ -159,8 +159,8 @@ class TrainingMonitor:
             self._log_message("WARNING", f"High memory usage detected: {metrics['memory_percent']}%")
             should_save = True
             
-        # Save checkpoint at regular intervals (every 50,000 timesteps)
-        if total_timesteps % 50000 == 0:
+        # Save checkpoint at regular intervals (every 200,000 timesteps)
+        if total_timesteps % 200000 == 0:
             self._log_message("INFO", f"Regular checkpoint at {total_timesteps} timesteps")
             should_save = True
             
@@ -185,7 +185,7 @@ class TrainingMonitor:
                 'test_rewards': test_rewards,
                 'epsilon_values': epsilon_values,
                 'epsilon': epsilon,
-                'replay_buffer': model.replay_buffer,
+                # 'replay_buffer': model.replay_buffer,  # Removed to reduce file size
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -211,7 +211,7 @@ class TrainingMonitor:
             checkpoint = th.load(checkpoint_path)
             model.q_net.load_state_dict(checkpoint['model_state_dict'])
             model.policy.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            model.replay_buffer = checkpoint['replay_buffer']
+            # model.replay_buffer = checkpoint['replay_buffer']  # Removed since we no longer save it
             return (checkpoint['total_timesteps'], 
                     checkpoint['episode'],
                     checkpoint['rewards'],
