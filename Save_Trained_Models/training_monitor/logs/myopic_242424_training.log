@@ -1,7 +1,0 @@
-2025-08-18 10:41:50 - INFO - Logging system initialized
-2025-08-18 10:43:49 - INFO - System health check at 10000 timesteps:
-2025-08-18 10:43:49 - INFO -   - CPU Usage: 100.0%
-2025-08-18 10:43:49 - INFO -   - Memory Usage: 73.9%
-2025-08-18 10:43:49 - INFO - Training progress:
-2025-08-18 10:43:49 - INFO -   - Current episode: 19
-2025-08-18 10:43:49 - INFO -   - Current epsilon: 0.0250
