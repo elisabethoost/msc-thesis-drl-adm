@@ -535,11 +535,11 @@ class AircraftDisruptionEnv(gym.Env):
 
 
     def process_uncertainties(self):
-        """Processes breakdown uncertainties directly from the state space.
+        """Processes ac unavailability period uncertainties directly from the state space.
 
         Probabilities evolve stochastically over time but are capped at [0.05, 0.95].
-        When the current datetime + timestep reaches the breakdown start time,
-        resolve the uncertainty fully to 0.00 or 1.00 by rolling the dice.
+        When the current datetime + timestep reaches the start time of the ac unavailability period,
+        resolve the uncertainty period fully to 0.00 or 1.00 by rolling the dice.
 
         The bias term pushes probabilities that are above 0.5 towards 1.0 and probabilities below 0.5 towards 0.0       
         """
