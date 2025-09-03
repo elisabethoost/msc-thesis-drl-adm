@@ -118,13 +118,25 @@ class AircraftDisruptionEnv(gym.Env):
 
         self.info_after_step = {}
 
+        # Performance optimization attributes (must be initialized before _get_initial_state)
+        self.something_happened = False
+        self._cached_state = None
+        self._total_calc_time = 0.0
+        self._step_count = 0
+
         # Initialize the environment state without generating probabilities
         self.current_datetime = self.start_datetime
         self.state = self._get_initial_state()
+        
+        # Store the current state matrices for efficient access
+        self.current_ac_mtx, self.current_fl_mtx = self.state
+        
+        # Update observation space to match actual matrix dimensions
+        self._update_observation_space()
 
         # Initialize eligible flights for conflict resolution bonus
         self.eligible_flights_for_resolved_bonus = self.get_initial_conflicts()
-        self.eligible_flights_for_not_being_cancelled_when_disruption_happens = self.get_initial_conflicts_with_deptime_before_unavail_start()
+        #self.eligible_flights_for_not_being_cancelled_when_disruption_happens = self.get_initial_conflicts_with_deptime_before_unavail_start()
 
         self.scenario_wide_delay_minutes = 0
         self.scenario_wide_cancelled_flights = 0
@@ -155,6 +167,15 @@ class AircraftDisruptionEnv(gym.Env):
         Returns:
             tuple: (ac_mtx, fl_mtx)
         """
+        # Simple caching: only recalculate if something changed
+        if hasattr(self, '_cached_state') and self._cached_state is not None and not self.something_happened:
+            return self._cached_state
+        
+        # Simple timing for performance measurement
+        import time
+        start_time = time.time()
+        
+        # Track total calculation time for performance comparison
         import math
         from dateutil import rrule
 
@@ -303,10 +324,14 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Create mapping from fl_mtx row to flight_id for efficient lookup
         self.fl_mtx_row_to_flight_id = {}
+        # Create mapping from matrix index to aircraft_id for efficient lookup
+        self.ac_mtx_idx_to_aircraft_id = {}
         current_row = 0
         for idx, aircraft_id in enumerate(self.aircraft_ids):
             if idx >= self.max_aircraft:
                 break
+            # Store mapping from matrix index to aircraft_id
+            self.ac_mtx_idx_to_aircraft_id[idx] = aircraft_id
             for flight_id, rotation_info in self.rotations_dict.items():
                 if flight_id in self.flights_dict and rotation_info['Aircraft'] == aircraft_id:
                     self.fl_mtx_row_to_flight_id[current_row] = flight_id
@@ -318,7 +343,107 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Optionally, trim fl_mtx to only used rows
         fl_mtx = fl_mtx[:fl_row] if fl_row > 0 else fl_mtx[:1]
-        return ac_mtx, fl_mtx
+        
+        # Pad matrices to fixed size for consistent observation space
+        MAX_AIRCRAFT = 6
+        MAX_TIME_INTERVALS = 96  # 24 hours / 15 minutes
+        MAX_FLIGHTS = MAX_AIRCRAFT * 20  # Maximum flights per aircraft
+        
+        # Pad ac_mtx to fixed size
+        padded_ac_mtx = np.zeros((MAX_AIRCRAFT, MAX_TIME_INTERVALS), dtype=np.float32)
+        padded_ac_mtx[:ac_mtx.shape[0], :ac_mtx.shape[1]] = ac_mtx
+        
+        # Pad fl_mtx to fixed size
+        padded_fl_mtx = np.zeros((MAX_FLIGHTS, MAX_TIME_INTERVALS + 1), dtype=np.float32)
+        padded_fl_mtx[:fl_mtx.shape[0], :fl_mtx.shape[1]] = fl_mtx
+        
+        # Cache the result for future use
+        self._cached_state = (padded_ac_mtx, padded_fl_mtx)
+        
+        # Simple timing output (only show occasionally to avoid spam)
+        self._step_count += 1
+            
+        if self._step_count % 1000 == 0:  # Show timing every 1000 steps instead of 100
+            elapsed_time = time.time() - start_time
+            self._total_calc_time += elapsed_time
+            avg_time = self._total_calc_time / self._step_count if self._step_count > 0 else 0
+            print(f"Matrix calculation: {elapsed_time:.4f}s, Avg: {avg_time:.4f}s, Total: {self._total_calc_time:.4f}s (step {self._step_count})")
+        
+        return padded_ac_mtx, padded_fl_mtx
+    
+    def get_performance_stats(self):
+        """Returns simple performance statistics for comparison."""
+        avg_time = self._total_calc_time / self._step_count if self._step_count > 0 else 0
+        return {
+            'total_steps': self._step_count,
+            'total_calc_time': self._total_calc_time,
+            'avg_calc_time': avg_time,
+            'cache_hit_rate': 'N/A'  # Could be enhanced later
+        }
+    
+    def get_current_state(self):
+        """Returns the current state matrices without recreating them.
+        
+        Returns:
+            tuple: (ac_mtx, fl_mtx) - current state matrices
+        """
+        # Use cached state if available and nothing changed
+        if hasattr(self, '_cached_state') and self._cached_state is not None and not self.something_happened:
+            return self._cached_state
+            
+        if self.current_ac_mtx is None or self.current_fl_mtx is None:
+            # If state hasn't been initialized, initialize it
+            self.current_ac_mtx, self.current_fl_mtx = self._get_initial_state()
+            self.state = (self.current_ac_mtx, self.current_fl_mtx)
+        
+        return self.current_ac_mtx, self.current_fl_mtx
+    
+    def update_state(self, new_ac_mtx, new_fl_mtx):
+        """Updates the current state matrices.
+        
+        Args:
+            new_ac_mtx: New aircraft matrix
+            new_fl_mtx: New flight matrix
+        """
+        self.current_ac_mtx = new_ac_mtx.copy()
+        self.current_fl_mtx = new_fl_mtx.copy()
+        self.state = (self.current_ac_mtx, self.current_fl_mtx)
+        
+        # Update observation space to match new matrix dimensions
+        self._update_observation_space()
+    
+    def _update_observation_space(self):
+        """Updates the observation space to use a fixed size for consistency across scenarios."""
+        # Use a fixed observation space size that can accommodate all scenarios
+        # This prevents observation space mismatch errors when switching between scenarios
+        
+        # Fixed sizes based on maximum possible dimensions
+        MAX_AIRCRAFT = 6
+        MAX_TIME_INTERVALS = 96  # 24 hours / 15 minutes
+        MAX_FLIGHTS = MAX_AIRCRAFT * 20  # Maximum flights per aircraft
+        
+        # Calculate fixed observation space size
+        ac_mtx_size = MAX_AIRCRAFT * MAX_TIME_INTERVALS
+        fl_mtx_size = MAX_FLIGHTS * (MAX_TIME_INTERVALS + 1)  # +1 for aircraft ID column
+        fixed_obs_size = ac_mtx_size + fl_mtx_size
+        
+        if DEBUG_MODE:
+            print(f"Using fixed observation space size: {fixed_obs_size}")
+            print(f"ac_mtx size: {ac_mtx_size}, fl_mtx size: {fl_mtx_size}")
+        
+        # Update the observation space with the fixed dimensions
+        self.observation_space = spaces.Dict({
+            'state': spaces.Box(
+                low=-np.inf, high=np.inf,
+                shape=(fixed_obs_size,),
+                dtype=np.float32
+            ),
+            'action_mask': spaces.Box(
+                low=0, high=1,
+                shape=(self.action_space.n,),
+                dtype=np.uint8
+            )
+        })
 
     def get_initial_conflicts(self):
         """Retrieves the initial conflicts in the environment.
@@ -384,7 +509,10 @@ class AircraftDisruptionEnv(gym.Env):
                             # Conflict detected! Add to set
                             flight_id = self.fl_mtx_row_to_flight_id.get(fl_row)
                             if flight_id:
-                                initial_conflicts.add((ac_idx, flight_id))
+                                # Use actual aircraft_id instead of matrix index
+                                aircraft_id = self.ac_mtx_idx_to_aircraft_id.get(ac_idx)
+                                if aircraft_id:
+                                    initial_conflicts.add((aircraft_id, flight_id))
                             conflict_found = True
                             break  # Found conflict for this flight, no need to check other unavailability periods
                     
@@ -1289,6 +1417,15 @@ class AircraftDisruptionEnv(gym.Env):
 
         self.current_datetime = next_datetime
         # State will be updated when _get_initial_state() is called next
+        
+        # Get current state matrices for observation processing
+        ac_mtx, fl_mtx = self._get_initial_state()
+        processed_state, _ = self.process_observation(ac_mtx, fl_mtx)
+        
+        # Calculate reward for the action
+        reward = self._calculate_reward(set(), set(), flight_action, aircraft_action, original_flight_action_departure_time, False)
+        
+        return processed_state, reward, False, False, {}
 
     def _calculate_reward(self, resolved_conflicts, remaining_conflicts, flight_action, aircraft_action, original_flight_action_departure_time, terminated):
         """Calculates the reward based on the current state of the environment using matrix-based approach.
@@ -1580,10 +1717,12 @@ class AircraftDisruptionEnv(gym.Env):
             tuple: A tuple containing the processed state, reward, terminated flag, truncated flag, and additional info.
         """
         # Get current state matrices
-        ac_mtx, fl_mtx = self._get_initial_state()
+        ac_mtx, fl_mtx = self.get_current_state()
 
-        # Fix the state before processing the action
-        self.fix_state(ac_mtx, fl_mtx)
+        # Fix the state before processing the action (work on copies to avoid modifying internal state)
+        ac_mtx_copy = ac_mtx.copy()
+        fl_mtx_copy = fl_mtx.copy()
+        self.fix_state(ac_mtx_copy, fl_mtx_copy)
 
         # Print the current state if in debug mode
         if DEBUG_MODE_PRINT_STATE:
@@ -1631,7 +1770,7 @@ class AircraftDisruptionEnv(gym.Env):
             processed_state, reward, terminated, truncated, info = self.handle_flight_operations(flight_action, aircraft_action, pre_action_conflicts)
 
         # Update the processed state after processing uncertainties
-        ac_mtx, fl_mtx = self._get_initial_state()
+        ac_mtx, fl_mtx = self.get_current_state()
         processed_state, _ = self.process_observation(ac_mtx, fl_mtx)
 
         terminated = self.check_termination_criteria()
@@ -1689,7 +1828,7 @@ class AircraftDisruptionEnv(gym.Env):
                 if DEBUG_MODE_STOPPING_CRITERIA:
                     print(f"Episode ended: {reason}")
 
-            ac_mtx, fl_mtx = self._get_initial_state()
+            ac_mtx, fl_mtx = self.get_current_state()
             processed_state, _ = self.process_observation(ac_mtx, fl_mtx)
             return processed_state, reward, terminated, truncated, {}
         elif aircraft_action == 0:
@@ -1714,7 +1853,7 @@ class AircraftDisruptionEnv(gym.Env):
                 if DEBUG_MODE_STOPPING_CRITERIA:
                     print(f"Episode ended: {reason}")
 
-            ac_mtx, fl_mtx = self._get_initial_state()
+            ac_mtx, fl_mtx = self.get_current_state()
             processed_state, _ = self.process_observation(ac_mtx, fl_mtx)
             return processed_state, reward, terminated, truncated, {}
         else:
@@ -1738,7 +1877,7 @@ class AircraftDisruptionEnv(gym.Env):
                 done = terminated or truncated
                 reward = self._calculate_reward(pre_action_conflicts, pre_action_conflicts, flight_action, aircraft_action, original_flight_action_departure_time, done)
 
-                ac_mtx, fl_mtx = self._get_initial_state()
+                ac_mtx, fl_mtx = self.get_current_state()
                 processed_state, _ = self.process_observation(ac_mtx, fl_mtx)
                 return processed_state, reward, terminated, truncated, {}
 
@@ -2089,14 +2228,15 @@ class AircraftDisruptionEnv(gym.Env):
                 # Update the scheduled_flights list with new times
                 scheduled_flights[i] = (flight_id, new_dep_time, new_arr_time)
                 
-                # Track the delay
-                original_dep = parse_time_with_day_offset(
-                    self.flights_dict[flight_id]['DepTime'], 
-                    self.start_datetime
-                )
-                original_dep_minutes = (original_dep - self.earliest_datetime).total_seconds() / 60
-                delay = new_dep_time - original_dep_minutes
-                self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
+                # Track the delay (only if flight still exists in flights_dict)
+                if flight_id in self.flights_dict:
+                    original_dep = parse_time_with_day_offset(
+                        self.flights_dict[flight_id]['DepTime'], 
+                        self.start_datetime
+                    )
+                    original_dep_minutes = (original_dep - self.earliest_datetime).total_seconds() / 60
+                    delay = new_dep_time - original_dep_minutes
+                    self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
                 
                 current_time = new_arr_time
             else:
@@ -2104,9 +2244,42 @@ class AircraftDisruptionEnv(gym.Env):
 
     def update_flight_times(self, flight_id, dep_time, arr_time):
         """Updates the departure and arrival times of a flight in the flights_dict."""
+        # Check if the flight still exists in flights_dict before updating
+        if flight_id not in self.flights_dict:
+            if DEBUG_MODE_CANCELLED_FLIGHT:
+                print(f"Warning: Flight {flight_id} not found in flights_dict. Skipping update.")
+            return
+        
         flight_info = self.flights_dict[flight_id]
         flight_info['DepTime'] = self.earliest_datetime + timedelta(minutes=dep_time)
         flight_info['ArrTime'] = self.earliest_datetime + timedelta(minutes=arr_time)
+        
+        # Mark that something changed so cache will be invalidated
+        self.something_happened = True
+
+    def cancel_flight(self, flight_id):
+        """Cancels the specified flight.
+
+        This function removes the flight from the rotations dictionary, the flights dictionary, and the state.
+        It also marks the flight as cancelled and removes it from the state.
+        
+        Args:
+            flight_id (str): The ID of the flight to cancel.
+        """
+        # Remove the flight from rotations_dict
+        if flight_id in self.rotations_dict:
+            del self.rotations_dict[flight_id]
+
+        # Remove the flight from flights_dict
+        if flight_id in self.flights_dict:
+            del self.flights_dict[flight_id]
+
+        # Mark the flight as cancelled
+        self.cancelled_flights.add(flight_id)
+
+        # Note: In the matrix-based approach, we don't need to manually update the state
+        # as it will be recalculated in _get_initial_state()
+        self.something_happened = True
 
     def get_unresolved_uncertainties(self):
         """Retrieves the unresolved uncertainties in the environment using matrix-based approach.
@@ -2213,6 +2386,10 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Generate initial state matrices
         ac_mtx, fl_mtx = self._get_initial_state()
+        
+        # Update the state and observation space
+        self.state = (ac_mtx, fl_mtx)
+        self._update_observation_space()
 
         # Get initial conflicts using matrix-based approach
         self.initial_conflict_combinations = self.get_initial_conflicts()

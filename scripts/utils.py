@@ -105,7 +105,15 @@ def parse_time_with_day_offset(time_str, reference_date):
     """
     Parses time and adds a day offset if '+1' is present, or if the arrival time 
     is earlier than the departure time (indicating a flight crosses midnight).
+    
+    Args:
+        time_str: Either a string in 'HH:MM' format or a datetime object
+        reference_date: Reference date for parsing
     """
+    # If time_str is already a datetime object, return it directly
+    if isinstance(time_str, datetime):
+        return time_str
+    
     # Check if '+1' exists in the time string
     if '+1' in time_str:
         # Remove the '+1' and strip any whitespace

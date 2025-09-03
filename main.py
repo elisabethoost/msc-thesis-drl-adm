@@ -252,7 +252,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(2e4)  # 50,000 timesteps for proper training
+    MAX_TOTAL_TIMESTEPS = int(1e4)  # 50,000 timesteps for proper training
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False

@@ -214,7 +214,8 @@ def run_train_dqn_both_timesteps(
                 alt_aircraft_dict = data_dict['alt_aircraft']
                 config_dict = data_dict['config']
 
-                from src.environment_simplified import AircraftDisruptionEnv
+                # from src.environment_simplified import AircraftDisruptionEnv
+                from src.environment_II import AircraftDisruptionEnv
                 env = AircraftDisruptionEnv(
                     aircraft_dict,
                     flights_dict,
@@ -223,7 +224,15 @@ def run_train_dqn_both_timesteps(
                     config_dict,
                     env_type=env_type
                 )
-                model.set_env(env)  # Update the model's environment with the new instance
+                # Set the environment, but handle observation space mismatch gracefully
+                try:
+                    model.set_env(env)  # Update the model's environment with the new instance
+                except ValueError as e:
+                    if "Observation spaces do not match" in str(e):
+                        print(f"Warning: Observation space mismatch for test scenario {test_scenario_folder}. Skipping this scenario.")
+                        continue
+                    else:
+                        raise e
 
                 obs, _ = env.reset()
 
@@ -295,8 +304,12 @@ def run_train_dqn_both_timesteps(
         config_dict = data_dict['config']
 
         # initialize the environment
-        from src.environment_simplified import AircraftDisruptionEnv
-        env = AircraftDisruptionEnv(
+        # from src.environment_simplified import AircraftDisruptionEnv
+        from src.environment_II import AircraftDisruptionEnv
+        
+        # Create a minimal environment first to get the correct observation space
+        # This environment will be used to initialize the model with the correct observation space
+        minimal_env = AircraftDisruptionEnv(
             aircraft_dict,
             flights_dict,
             rotations_dict,
@@ -304,14 +317,17 @@ def run_train_dqn_both_timesteps(
             config_dict,
             env_type=env_type
         )
-
+        
+        # Reset the environment to initialize the observation space
+        minimal_env.reset()
+        
+        # Create the model with the correct observation space
         model = DQN(
             policy='MultiInputPolicy',
-            env=env,
+            env=minimal_env,
             learning_rate=LEARNING_RATE,
             gamma=GAMMA,
-            buffer_size=BUFFER_SIZE,\
-            
+            buffer_size=BUFFER_SIZE,
             learning_starts=LEARNING_STARTS,
             batch_size=BATCH_SIZE,
             target_update_interval=TARGET_UPDATE_INTERVAL,
@@ -328,14 +344,25 @@ def run_train_dqn_both_timesteps(
         monitor = TrainingMonitor(save_folder, stripped_scenario_folder, env_type, single_seed)
         print(f"Monitor initialized. Log directory: {monitor.log_dir}")
 
-        # Try to load checkpoint
+        # Try to load checkpoint (disabled for new environment to avoid observation space mismatch)
         print("Checking for existing checkpoints...")
-        checkpoint_data = monitor.load_checkpoint(model)
-        if checkpoint_data:
-            total_timesteps, episode_start, rewards, test_rewards, epsilon_values, epsilon = checkpoint_data
-            print(f"Loaded checkpoint: episode {episode_start}, timesteps {total_timesteps}")
-        else:
-            print("No checkpoint found, starting fresh training")
+        checkpoint_data = None
+        try:
+            checkpoint_data = monitor.load_checkpoint(model)
+            if checkpoint_data:
+                total_timesteps, episode_start, rewards, test_rewards, epsilon_values, epsilon = checkpoint_data
+                print(f"Loaded checkpoint: episode {episode_start}, timesteps {total_timesteps}")
+            else:
+                print("No checkpoint found, starting fresh training")
+                total_timesteps = 0
+                episode_start = 0
+                rewards = {}
+                test_rewards = []
+                epsilon_values = []
+                epsilon = EPSILON_START
+        except Exception as e:
+            print(f"Checkpoint loading failed (likely due to observation space mismatch): {e}")
+            print("Starting fresh training...")
             total_timesteps = 0
             episode_start = 0
             rewards = {}

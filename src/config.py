@@ -1,11 +1,17 @@
 import numpy as np
 
 # General Environment Settings
-# General Environment Settings
 MAX_AIRCRAFT = 6  # Maximum number of aircraft considered in the environment
 MAX_FLIGHTS_PER_AIRCRAFT = 20  # Maximum number of flights per aircraft
 ROWS_STATE_SPACE = 1 + MAX_AIRCRAFT  # Number of rows in the state space
-COLUMNS_STATE_SPACE = 1 + 2 + 3 * MAX_FLIGHTS_PER_AIRCRAFT # Number of columns in the state space: 1 for ac id, 2 for ac unavail, 3 for each flight (id, start, end)
+
+# Time-based state space calculation
+# Maximum recovery period: 24 hours (1440 minutes) converted to 15-minute intervals
+MAX_RECOVERY_HOURS = 24  # Maximum recovery period in hours
+MAX_RECOVERY_INTERVALS = (MAX_RECOVERY_HOURS * 60) // 15  # Convert to 15-minute intervals
+# ac_mtx: (aircraft, time_intervals) + fl_mtx: (flights, time_intervals + 1 for aircraft allocation)
+MAX_TIME_INTERVALS = MAX_RECOVERY_INTERVALS
+COLUMNS_STATE_SPACE = MAX_TIME_INTERVALS  # Number of columns in the state space (time intervals)
 
 # Calculate the flattened action space size
 ACTION_SPACE_SIZE = (MAX_AIRCRAFT + 1) * (MAX_FLIGHTS_PER_AIRCRAFT + 1)  # Number of possible actions (+1 for the zero for no action and cancellations)
