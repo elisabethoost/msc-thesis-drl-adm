@@ -252,7 +252,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(1e4)  # 100,000 timesteps for testing
+    MAX_TOTAL_TIMESTEPS = int(5e5)   # 2 million timesteps for testing
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 
         # "Data/TRAINING/6ac-13-mauve"
         # "Data/TRAINING/6ac-20-lilac/" 
-        "Data/TRAINING/6ac-65-yellow" 
+        "Data/TRAINING/3ac-130-green" 
       
         ]
 

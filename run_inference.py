@@ -260,14 +260,14 @@ def run_inference_all_models(model_paths, data_folder, seeds, output_file):
 if __name__ == "__main__":
     # Configuration
     # For trying: use fewer seeds first
-    seeds = list(range(1, 6))  # 5 seeds for trying (change to list(range(1, 101)) for full run)
+    seeds = list(range(1, 101))  # 5 seeds for trying (change to list(range(1, 101)) for full run)
     
     # Test data folder (scenarios to test on)
-    data_folder = "Data/TRAINING/6ac-26-lilac"  # Your TESTING DATA
+    data_folder = "Data/TRAINING/3ac-143-black"  # Your TESTING DATA
     data_folder_name = data_folder.split("/")[-1]
 
     # Training folder name (for loading trained models)
-    training_folder_name = "6ac-65-yellow"  
+    training_folder_name = "3ac-130-green"  
     
     # Model paths (point to trained models)
     model_paths = [
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     
     # Output file - better naming structure
     # output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_greedy_reactive.csv"
-    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_trying.csv"
+    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}.csv"
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

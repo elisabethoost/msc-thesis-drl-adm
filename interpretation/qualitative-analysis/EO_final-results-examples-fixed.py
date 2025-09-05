@@ -8,7 +8,7 @@ import seaborn as sns
 Steps:
 1. change latest_folder = "scenario_folder_scenario_76.json" to the scenario in logs/scenarios/ 
 corresponds to your TEST DATA
-2. change this too: results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}_seeds.csv"))
+2. change this too: results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}_seeds.csv")) from run_inference.py (testing data)
 3. check if results_df is correct (same as output_file in run_inference.py)
 4. run the script normally to obtain the comparison table as a csv file in logs/inference_metrics/
 5. run this command if you want to see the output as txt file: python interpretation/qualitative-analysis/EO_final-results-examples-fixed.py > output.txt 2>&1
@@ -26,7 +26,7 @@ pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_rows', None)
 
 seeds = []
-for i in range(1, 6):
+for i in range(1, 101):
     seeds.append(i)
 
 def time_to_minutes(timestr):
@@ -135,7 +135,7 @@ def extract_disruption_stats(scenario_data):
 
 # Path to the scenarios folder
 scenario_folder_path = "logs/scenarios/"
-latest_folder = "scenario_folder_scenario_76.json" # Training/6ac-26-lilac
+latest_folder = "scenario_folder_scenario_85.json" # Training/6ac-26-lilac
 # latest_folder = "scenario_folder_scenario_77.json" # Testing/6ac-65-yellow
 
 file_path = os.path.join(scenario_folder_path, latest_folder)
@@ -179,7 +179,7 @@ print(scenarios_df)
 # Load and process inference results
 scenario_folder_path = "logs/inference_metrics/"
 # unpack results_df
-results_df = pd.read_csv(os.path.join(scenario_folder_path, f"6ac-26-lilac_{len(seeds)}_trying.csv"))
+results_df = pd.read_csv(os.path.join(scenario_folder_path, f"3ac-143-black_{len(seeds)}.csv"))
 
 # Merge scenario-level info from scenarios_df into results_df
 merged_df = results_df.merge(scenarios_df, on='Scenario', how='left')

@@ -61,10 +61,10 @@ def run_train_dqn_both_timesteps(
     # correspond to parameters used in the standard Deep Q-Network (DQN) algorithm & loss function
     LEARNING_RATE = 0.0001                   # alpha in the Q function
     GAMMA = 0.9999                           # Discount factor for future rewards
-    BUFFER_SIZE = 1000                       # Size of the experience replay buffer, D
-    BATCH_SIZE = 64                          # Number of samples
-    TARGET_UPDATE_INTERVAL = 50              # How often to update the target network
-    NEURAL_NET_STRUCTURE = dict(net_arch=[64, 64])  # Architecture of the Q-network, Q(s,a;θ).
+    BUFFER_SIZE = 100000                       # Size of the experience replay buffer, D
+    BATCH_SIZE = 128                          # Number of samples
+    TARGET_UPDATE_INTERVAL = 100              # How often to update the target network
+    NEURAL_NET_STRUCTURE = dict(net_arch=[256, 256*2, 256])  # Architecture of the Q-network, Q(s,a;θ).
 
     LEARNING_STARTS = 0                      # Number of steps before training starts
     TRAIN_FREQ = 4                           # How often to train the Q-network
@@ -77,7 +77,7 @@ def run_train_dqn_both_timesteps(
     if EPSILON_TYPE == "linear":
         EPSILON_MIN = 0
 
-    N_EPISODES = 10                         # Reduced from 50
+    N_EPISODES = 50                         # Reduced from 50
 
     # For quick testing, reduce MAX_TOTAL_TIMESTEPS if a value is provided anywhere
     # I do not think I need this, but I will keep it for now - as I can just change the value in the main.py file
