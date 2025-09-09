@@ -53,4 +53,4 @@ Save_Trained_Models/training_monitor/checkpoints/*.pt
 Save_Trained_Models/*/checkpoints/*.pt
 *.pt
 
-Save_Trained_Models/*  
+Save_Trained_Models/* 

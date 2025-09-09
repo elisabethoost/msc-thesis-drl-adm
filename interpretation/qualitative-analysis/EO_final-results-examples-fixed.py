@@ -26,7 +26,7 @@ pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_rows', None)
 
 seeds = []
-for i in range(1, 101):
+for i in range(1, 6):
     seeds.append(i)
 
 def time_to_minutes(timestr):
@@ -179,7 +179,7 @@ print(scenarios_df)
 # Load and process inference results
 scenario_folder_path = "logs/inference_metrics/"
 # unpack results_df
-results_df = pd.read_csv(os.path.join(scenario_folder_path, f"3ac-143-black_{len(seeds)}.csv"))
+results_df = pd.read_csv(os.path.join(scenario_folder_path, f"3ac-143-black_{len(seeds)}_4.csv"))
 
 # Merge scenario-level info from scenarios_df into results_df
 merged_df = results_df.merge(scenarios_df, on='Scenario', how='left')

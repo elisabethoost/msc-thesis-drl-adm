@@ -260,7 +260,7 @@ def run_inference_all_models(model_paths, data_folder, seeds, output_file):
 if __name__ == "__main__":
     # Configuration
     # For trying: use fewer seeds first
-    seeds = list(range(1, 101))  # 5 seeds for trying (change to list(range(1, 101)) for full run)
+    seeds = list(range(1, 6))  # 5 seeds for trying (change to list(range(1, 101)) for full run)
     
     # Test data folder (scenarios to test on)
     data_folder = "Data/TRAINING/3ac-143-black"  # Your TESTING DATA
@@ -272,12 +272,12 @@ if __name__ == "__main__":
     # Model paths (point to trained models)
     model_paths = [
         # Paths based on your main.py configuration - both training seeds
-        (os.path.join("Save_Trained_Models", training_folder_name, "myopic_232323.zip"), "myopic_232323"),
-        (os.path.join("Save_Trained_Models", training_folder_name, "proactive_232323.zip"), "proactive_232323"),
-        (os.path.join("Save_Trained_Models", training_folder_name, "reactive_232323.zip"), "reactive_232323"),
-        (os.path.join("Save_Trained_Models", training_folder_name, "myopic_242424.zip"), "myopic_242424"),
-        (os.path.join("Save_Trained_Models", training_folder_name, "proactive_242424.zip"), "proactive_242424"),
-        (os.path.join("Save_Trained_Models", training_folder_name, "reactive_242424.zip"), "reactive_242424"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "myopic_232323.zip"), "myopic_232323"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "proactive_232323.zip"), "proactive_232323"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "reactive_232323.zip"), "reactive_232323"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "myopic_242424.zip"), "myopic_242424"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "proactive_242424.zip"), "proactive_242424"),
+        (os.path.join("Save_Trained_Models5", training_folder_name, "reactive_242424.zip"), "reactive_242424"),
         # Add greedy reactive baseline
         ("greedy_reactive", "greedy_reactive"),
         # # Add optimal exact baseline
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     
     # Output file - better naming structure
     # output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_greedy_reactive.csv"
-    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}.csv"
+    output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_4.csv"
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

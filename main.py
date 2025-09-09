@@ -10,6 +10,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+'''
+change save_folder to the training folder!!
+'''
 
 def get_config_variables(config_module):
     config_vars = {
@@ -252,7 +255,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(5e5)   # 2 million timesteps for testing
+    MAX_TOTAL_TIMESTEPS = int(1.5e6)   # 2 million timesteps for testing
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
@@ -260,7 +263,7 @@ if __name__ == "__main__":
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
 
-    save_folder = "Save_Trained_Models"
+    save_folder = "Save_Trained_Models5"
     # TESTING_FOLDERS_PATH = "data/Testing/6ac-100-superdiverse/"
     TESTING_FOLDERS_PATH = "Data/TRAINING/6ac-65-yellow"
 
@@ -280,7 +283,7 @@ if __name__ == "__main__":
 
         # "Data/TRAINING/6ac-13-mauve"
         # "Data/TRAINING/6ac-20-lilac/" 
-        "Data/TRAINING/3ac-130-green" 
+        "Data/TRAINING/3ac-130-green"
       
         ]
 
