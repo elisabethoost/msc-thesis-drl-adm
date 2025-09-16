@@ -53,8 +53,8 @@ def run_train_dqn_both_timesteps(
     save_folder,
     save_results_big_run,
     TESTING_FOLDERS_PATH,
-    env_type
-):
+    env_type):
+    
     print(f"Training on {stripped_scenario_folder} with {env_type} environment")
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
@@ -79,11 +79,6 @@ def run_train_dqn_both_timesteps(
         EPSILON_MIN = 0.1
 
     N_EPISODES = 10                         # Reduced from 50
-
-    # For quick testing, reduce MAX_TOTAL_TIMESTEPS if a value is provided anywhere
-    # I do not think I need this, but I will keep it for now - as I can just change the value in the main.py file
-    if 'MAX_TOTAL_TIMESTEPS' not in locals() and 'MAX_TOTAL_TIMESTEPS' not in globals():
-        MAX_TOTAL_TIMESTEPS = 1000  # Reduced for quick testing
 
     starting_time = time.time()              # gives the time elapsed since 1970-01-01 00:00:00 UTC aka Unix epoch 
 
@@ -369,6 +364,7 @@ def run_train_dqn_both_timesteps(
             test_rewards = []
             epsilon_values = []
             epsilon = EPSILON_START
+        #########################################################
 
         episode = episode_start
         while total_timesteps < MAX_TOTAL_TIMESTEPS:
@@ -542,7 +538,7 @@ def run_train_dqn_both_timesteps(
                 rewards[episode][scenario_folder]["total"] = total_reward_local
 
                 scenario_data["total_reward"] = total_reward_local
-                episode_data["scenarios"][scenario_folder] = scenario_data
+                episode_data["scenarios"][scenario_folder] = scenario_data # this returns a dictionary with the scenario folder as the key and the scenario data as the value
 
             # Perform cross-validation if enabled
             if cross_val_flag:
@@ -564,7 +560,7 @@ def run_train_dqn_both_timesteps(
                         train_dqn_agent.best_test_reward = current_test_reward
                         best_test_reward_local = current_test_reward
 
-            # Calculate the average reward for this batch of episodes
+            # Calculate the average reward for this episode (so all scenarios for episode 0, or 1, or 2, etc.)
             avg_reward_for_this_batch = 0
             for i in range(len(scenario_folders)):
                 avg_reward_for_this_batch += rewards[episode][scenario_folders[i]]["total"]
@@ -615,6 +611,8 @@ def run_train_dqn_both_timesteps(
     rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, action_sequences, model_path = train_dqn_agent(env_type, single_seed)
 
     # Extract only the necessary data
+    # here we save the average rewards for each episode (where episode reward = [(avg reward of schedule 1 for episode 0 + avg reward of schedule 2 for episode 0 + ... + avg reward of schedule n for episode 0)/n]
+    # and the steps per episode 
     episode_rewards = [rewards[e]["avg_reward"] for e in sorted(rewards.keys()) if "avg_reward" in rewards[e]]
     episode_steps = [rewards[e]["total_timesteps"] for e in sorted(rewards.keys()) if "total_timesteps" in rewards[e]]
 
