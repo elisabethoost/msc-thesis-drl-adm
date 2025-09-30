@@ -54,4 +54,7 @@ Save_Trained_Models/*/checkpoints/*.pt
 *.pt
 
 # Ignore the entire Save_Trained_Models directory
-Save_Trained_Models/ 
+Save_Trained_Models/
+Save_Trained_Models1/
+Save_Trained_Models2/
+Save_Trained_Models3/

@@ -27,7 +27,7 @@ TIMESTEP_HOURS = 1  # Length of each timestep in hours
 DUMMY_VALUE = -999  # Dummy value for padding
 
 
-# Reward and Penalty Values
+# Reward and Penalty Values - IMPROVED FOR PROACTIVE LEARNING
 RESOLVED_CONFLICT_REWARD = 30000     # Reward for resolving a conflict
 DELAY_MINUTE_PENALTY = 50           # Penalty per minute of delay
 MAX_DELAY_PENALTY = 25000000            # Maximum penalty for delay
@@ -40,6 +40,11 @@ AHEAD_BONUS_PER_MINUTE = 0.05                # Reward for proactive flight chang
 TIME_MINUTE_PENALTY = 0.1                 # penalty for every minute passed, each timestep cumulatively
 TERMINATION_REWARD = 0                  # Reward for terminating the episode
 TAIL_SWAP_COST = 100             # Penalty for swapping a flight to a different aircraft
+
+# NEW PROACTIVE LEARNING REWARDS AND PENALTIES
+OVERLAP_PENALTY_PER_MINUTE = 10000   # High penalty for each minute of overlap with unavailability
+PROACTIVE_MOVE_REWARD = 1000         # Reward for moving flights before conflicts occur
+PROACTIVE_THRESHOLD_HOURS = 2        # Hours before conflict to consider action "proactive"
 
 '''
 

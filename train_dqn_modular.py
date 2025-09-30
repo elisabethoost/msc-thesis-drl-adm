@@ -54,7 +54,7 @@ def run_train_dqn_both_timesteps(
     save_results_big_run,
     TESTING_FOLDERS_PATH,
     env_type):
-    
+
     print(f"Training on {stripped_scenario_folder} with {env_type} environment")
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
@@ -69,6 +69,9 @@ def run_train_dqn_both_timesteps(
 
     LEARNING_STARTS = 1000                  # Increased from 0 (allow buffer to fill) - Number of steps before training starts
     TRAIN_FREQ = 1                          # Reduced from 4 (train more frequently) - How often to train the Q-network
+
+    # Episode termination settings
+    MAX_STEPS_PER_SCENARIO = 20             # Maximum steps per scenario to prevent infinite episodes
 
     # Exploration parameters. epsilon-greedy exploration. exploration (random) vs exploitation (greedy).
     EPSILON_START = 1.0                      # Starts with 100% random exploration at the beginning of training
@@ -182,6 +185,9 @@ def run_train_dqn_both_timesteps(
         total_timesteps = 0  
         consecutive_drops = 0  # Track consecutive performance drops
         best_test_reward = float('-inf')  # Track best test performance
+        
+        # Initialize detailed episode tracking for visualization
+        detailed_episode_data = {}
 
         def cross_validate_on_test_data(model, current_episode, log_data):
             cross_val_data = {
@@ -210,7 +216,7 @@ def run_train_dqn_both_timesteps(
                 config_dict = data_dict['config']
 
                 # from src.environment_simplified import AircraftDisruptionEnv
-                from src.environment_II import AircraftDisruptionEnv
+                from src.environment import AircraftDisruptionEnv
                 env = AircraftDisruptionEnv(
                     aircraft_dict,
                     flights_dict,
@@ -300,7 +306,7 @@ def run_train_dqn_both_timesteps(
 
         # initialize the environment
         # from src.environment_simplified import AircraftDisruptionEnv
-        from src.environment_II import AircraftDisruptionEnv
+        from src.environment import AircraftDisruptionEnv
         
         # Create a minimal environment first to get the correct observation space
         # This environment will be used to initialize the model with the correct observation space
@@ -374,6 +380,13 @@ def run_train_dqn_both_timesteps(
                 "epsilon_start": epsilon,
                 "scenarios": {},
             }
+            
+            # Initialize detailed episode tracking for visualization
+            detailed_episode_data[episode] = {
+                "episode_number": episode + 1,
+                "epsilon_start": epsilon,
+                "scenarios": {}
+            }
 
             for scenario_folder in scenario_folders:
                 scenario_data = {
@@ -382,6 +395,14 @@ def run_train_dqn_both_timesteps(
                 }
                 rewards[episode][scenario_folder] = {}
                 best_reward_local = float('-inf')
+                
+                # Initialize detailed scenario tracking for visualization
+                detailed_episode_data[episode]["scenarios"][scenario_folder] = {
+                    "scenario_folder": scenario_folder,
+                    "steps": [],
+                    "initial_state": None,
+                    "total_reward": 0
+                }
                 data_dict = load_scenario_data(scenario_folder)
                 aircraft_dict = data_dict['aircraft']
                 flights_dict = data_dict['flights']
@@ -405,8 +426,22 @@ def run_train_dqn_both_timesteps(
                 done_flag = False
                 total_reward_local = 0
                 timesteps_local = 0
+                max_steps_reached = False
+                
+                # Store initial state for visualization
+                detailed_episode_data[episode]["scenarios"][scenario_folder]["initial_state"] = {
+                    "flights_dict": flights_dict.copy(),
+                    "rotations_dict": rotations_dict.copy(),
+                    "alt_aircraft_dict": alt_aircraft_dict.copy(),
+                    "aircraft_dict": aircraft_dict.copy(),
+                    "config_dict": config_dict.copy(),
+                    "current_datetime": env.current_datetime,
+                    "swapped_flights": env.swapped_flights.copy(),
+                    "environment_delayed_flights": env.environment_delayed_flights.copy(),
+                    "cancelled_flights": env.cancelled_flights.copy()
+                }
 
-                while not done_flag:
+                while not done_flag and not max_steps_reached:
                     num_cancelled_flights_before_step = len(env.cancelled_flights)             # immediately after reset this is 0 as there are no cancelled flights at the start of the episode
                     num_delayed_flights_before_step = len(env.environment_delayed_flights)     # empty dictionary
                     num_penalized_delays_before_step = len(env.penalized_delays)               # empty dictionary
@@ -499,6 +534,25 @@ def run_train_dqn_both_timesteps(
 
                     timesteps_local += 1
                     total_timesteps += 1
+                    
+                    # Check if we've reached the maximum steps for this scenario
+                    if timesteps_local >= MAX_STEPS_PER_SCENARIO:
+                        max_steps_reached = True
+                        # Apply penalty for hitting step limit with unresolved conflicts
+                        if env.check_flight_disruption_overlaps():
+                            step_limit_penalty = -50.0  # Large negative reward for failing to resolve conflicts
+                            # Add the penalty to the replay buffer
+                            model.replay_buffer.add(
+                                obs=obs,
+                                next_obs=obs,  # Same state since we're terminating
+                                action=action,
+                                reward=step_limit_penalty,
+                                done=True,
+                                infos=[{"step_limit_penalty": True}]
+                            )
+                        break
+                    
+                    # Removed frequent progress logging to avoid slowing down training
 
                     if total_timesteps > model.learning_starts and total_timesteps % TRAIN_FREQ == 0:
                         model.train(gradient_steps=1, batch_size=BATCH_SIZE)
@@ -530,6 +584,24 @@ def run_train_dqn_both_timesteps(
                         "num_penalized_delays": num_penalized_delays_after_step - num_penalized_delays_before_step,
                         "num_penalized_cancelled": num_penalized_cancelled_after_step - num_penalized_cancelled_before_step,
                     }
+                    
+                    # Store detailed step information for visualization (after all variables are calculated)
+                    step_info = {
+                        "step": timesteps_local,
+                        "action": action.item(),
+                        "action_reason": action_reason,
+                        "reward": reward,
+                        "epsilon": epsilon,
+                        "total_reward_so_far": total_reward_local + reward,
+                        "current_datetime": env.current_datetime,
+                        "swapped_flights": env.swapped_flights.copy(),
+                        "environment_delayed_flights": env.environment_delayed_flights.copy(),
+                        "cancelled_flights": env.cancelled_flights.copy(),
+                        "penalized_delays": env.penalized_delays.copy(),
+                        "penalized_cancelled_flights": env.penalized_cancelled_flights.copy(),
+                        "impact_of_action": impact_of_action
+                    }
+                    detailed_episode_data[episode]["scenarios"][scenario_folder]["steps"].append(step_info)
 
                     if done_flag:
                         break
@@ -538,7 +610,13 @@ def run_train_dqn_both_timesteps(
                 rewards[episode][scenario_folder]["total"] = total_reward_local
 
                 scenario_data["total_reward"] = total_reward_local
+                scenario_data["episode_ended_reason"] = "max_steps_reached" if max_steps_reached else "natural_termination"
                 episode_data["scenarios"][scenario_folder] = scenario_data # this returns a dictionary with the scenario folder as the key and the scenario data as the value
+                
+                # Update detailed episode data with final totals
+                detailed_episode_data[episode]["scenarios"][scenario_folder]["total_reward"] = total_reward_local
+                detailed_episode_data[episode]["scenarios"][scenario_folder]["total_steps"] = timesteps_local
+                detailed_episode_data[episode]["scenarios"][scenario_folder]["episode_ended_reason"] = "max_steps_reached" if max_steps_reached else "natural_termination"
 
             # Perform cross-validation if enabled
             if cross_val_flag:
@@ -562,21 +640,29 @@ def run_train_dqn_both_timesteps(
 
             # Calculate the average reward for this episode (so all scenarios for episode 0, or 1, or 2, etc.)
             avg_reward_for_this_batch = 0
+            max_steps_hit_count = 0
             for i in range(len(scenario_folders)):
                 avg_reward_for_this_batch += rewards[episode][scenario_folders[i]]["total"]
+                # Count how many scenarios hit the step limit
+                if episode_data["scenarios"][scenario_folders[i]]["episode_ended_reason"] == "max_steps_reached":
+                    max_steps_hit_count += 1
             avg_reward_for_this_batch /= len(scenario_folders)
 
             rewards[episode]["avg_reward"] = avg_reward_for_this_batch
             rewards[episode]["total_timesteps"] = total_timesteps
+            rewards[episode]["max_steps_hit_count"] = max_steps_hit_count
 
             current_time = time.time()
             percentage_complete = (total_timesteps / MAX_TOTAL_TIMESTEPS) * 100
 
-            # Calculate time per 10k timesteps
+            # Calculate time per 10k timesteps and store timesteps for this episode
             if episode > 0:
                 time_this_episode = current_time - previous_episode_time
                 timesteps_this_episode = total_timesteps - previous_timesteps
                 time_per_10000 = (time_this_episode / timesteps_this_episode) * 10000
+                
+                # Store timesteps for this episode (not cumulative)
+                rewards[episode]["timesteps_this_episode"] = timesteps_this_episode
                 
                 # Calculate remaining time based on recent timestep rate
                 remaining_timesteps = MAX_TOTAL_TIMESTEPS - total_timesteps
@@ -584,13 +670,16 @@ def run_train_dqn_both_timesteps(
                 hours = int(estimated_time_remaining // 3600)
                 minutes = int((estimated_time_remaining % 3600) // 60)
             else:
+                # For the first episode, timesteps_this_episode is the same as total_timesteps
+                rewards[episode]["timesteps_this_episode"] = total_timesteps
                 time_per_10000 = 0
                 hours = 0
                 minutes = 0
             
             rewards[episode]["timestamp"] = current_time
             time_remaining_str = f"{hours}h{minutes}m" if hours > 0 else f"{minutes}m"
-            print(f"({total_timesteps:.0f}/{MAX_TOTAL_TIMESTEPS:.0f} - {percentage_complete:.0f}% - {time_remaining_str} remaining, {time_per_10000:.0f}s/10k steps) {env_type:<10} - episode {episode + 1} - epsilon {epsilon:.2f} - reward this episode: {avg_reward_for_this_batch:.2f}")
+            step_limit_info = f" (max_steps_hit: {max_steps_hit_count}/{len(scenario_folders)})" if max_steps_hit_count > 0 else ""
+            print(f"({total_timesteps:.0f}/{MAX_TOTAL_TIMESTEPS:.0f} - {percentage_complete:.0f}% - {time_remaining_str} remaining, {time_per_10000:.0f}s/10k steps) {env_type:<10} - episode {episode + 1} - epsilon {epsilon:.2f} - reward this episode: {avg_reward_for_this_batch:.2f}{step_limit_info}")
 
             previous_episode_time = current_time
             previous_timesteps = total_timesteps
@@ -605,23 +694,32 @@ def run_train_dqn_both_timesteps(
         actual_total_timesteps = total_timesteps
 
         # Return collected data
-        return rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, {}, model_path
+        return rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, {}, model_path, detailed_episode_data
 
     # Run training for the specified environment type only
-    rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, action_sequences, model_path = train_dqn_agent(env_type, single_seed)
+    rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, action_sequences, model_path, detailed_episode_data = train_dqn_agent(env_type, single_seed)
 
-    # Extract only the necessary data
+            # Extract only the necessary data
     # here we save the average rewards for each episode (where episode reward = [(avg reward of schedule 1 for episode 0 + avg reward of schedule 2 for episode 0 + ... + avg reward of schedule n for episode 0)/n]
     # and the steps per episode 
     episode_rewards = [rewards[e]["avg_reward"] for e in sorted(rewards.keys()) if "avg_reward" in rewards[e]]
-    episode_steps = [rewards[e]["total_timesteps"] for e in sorted(rewards.keys()) if "total_timesteps" in rewards[e]]
+    episode_steps_cumulative = [rewards[e]["total_timesteps"] for e in sorted(rewards.keys()) if "total_timesteps" in rewards[e]]
+    episode_steps_per_episode = [rewards[e]["timesteps_this_episode"] for e in sorted(rewards.keys()) if "timesteps_this_episode" in rewards[e]]
+    nr_episodes = len(episode_rewards)
 
     # Save results for this environment type
     os.makedirs(f"{save_results_big_run}/numpy", exist_ok=True)
     np.save(f'{save_results_big_run}/numpy/{env_type}_runs_seed_{single_seed}.npy', np.array(episode_rewards))
-    np.save(f'{save_results_big_run}/numpy/{env_type}_steps_runs_seed_{single_seed}.npy', np.array(episode_steps))
+    np.save(f'{save_results_big_run}/numpy/{env_type}_steps_runs_seed_{single_seed}.npy', np.array(episode_steps_cumulative))
+    np.save(f'{save_results_big_run}/numpy/{env_type}_timesteps_per_episode_seed_{single_seed}.npy', np.array(episode_steps_per_episode))
     if test_rewards:  # Only save if we have test rewards
         np.save(f'{save_results_big_run}/numpy/test_rewards_{env_type}_seed_{single_seed}.npy', test_rewards)
+    
+    # Save detailed episode data for visualization
+    os.makedirs(f"{save_results_big_run}/detailed_episodes", exist_ok=True)
+    import pickle
+    with open(f'{save_results_big_run}/detailed_episodes/{env_type}_detailed_episodes_seed_{single_seed}.pkl', 'wb') as f:
+        pickle.dump(detailed_episode_data, f)
 
     # Return empty arrays for the other environment types
     empty_array = np.array([])
