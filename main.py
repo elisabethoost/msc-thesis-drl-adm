@@ -121,6 +121,7 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
         # Initialize data structures only for available environment types
         all_runs = {env_type['name']: [] for env_type in available_env_types}
         all_steps_runs = {env_type['name']: [] for env_type in available_env_types}
+        all_timesteps_per_episode_runs = {env_type['name']: [] for env_type in available_env_types}
         all_test_rewards = {env_type['name']: [] for env_type in available_env_types}
 
         # Load data for each seed and available environment type
@@ -130,8 +131,16 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
                     runs = np.load(os.path.join(numpy_path, f"{env_type['name']}_runs_seed_{seed}.npy"), allow_pickle=True)
                     steps = np.load(os.path.join(numpy_path, f"{env_type['name']}_steps_runs_seed_{seed}.npy"), allow_pickle=True)
                     
+                    # Try to load timesteps per episode data (new format)
+                    try:
+                        timesteps_per_episode = np.load(os.path.join(numpy_path, f"{env_type['name']}_timesteps_per_episode_seed_{seed}.npy"), allow_pickle=True)
+                    except FileNotFoundError:
+                        # Fallback: calculate from cumulative steps if new format doesn't exist
+                        timesteps_per_episode = np.diff(steps, prepend=steps[0])
+                    
                     all_runs[env_type['name']].append(runs)
                     all_steps_runs[env_type['name']].append(steps)
+                    all_timesteps_per_episode_runs[env_type['name']].append(timesteps_per_episode)
 
                     if cross_val_flag:
                         test_rewards = np.load(os.path.join(numpy_path, f"test_rewards_{env_type['name']}_seed_{seed}.npy"), allow_pickle=True)
@@ -152,11 +161,14 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
             min_length = min(len(run) for run in all_runs[name] if len(run) > 0)
             runs_array = np.array([run[:min_length] for run in all_runs[name]])
             steps_array = np.array([steps[:min_length] for steps in all_steps_runs[name]])
+            timesteps_per_episode_array = np.array([tpe[:min_length] for tpe in all_timesteps_per_episode_runs[name]])
 
             # Calculate statistics
             mean = runs_array.mean(axis=0)
             std = runs_array.std(axis=0)
             steps_mean = steps_array.mean(axis=0).astype(int)
+            timesteps_per_episode_mean = timesteps_per_episode_array.mean(axis=0)
+            timesteps_per_episode_std = timesteps_per_episode_array.std(axis=0)
 
             # Apply smoothing
             smooth_window = 1
@@ -167,7 +179,9 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
             processed_data[name] = {
                 'mean_sm': mean_sm,
                 'std_sm': std_sm,
-                'steps_sm': steps_sm
+                'steps_sm': steps_sm,
+                'timesteps_per_episode_mean': timesteps_per_episode_mean,
+                'timesteps_per_episode_std': timesteps_per_episode_std
             }
 
             # Save combined arrays
@@ -181,41 +195,66 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
         plots_dir = f"{scenario_path}/plots"
         os.makedirs(plots_dir, exist_ok=True)
 
-        # Plot training curves only for available environment types
-        plt.figure(figsize=(12,6))
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 6))
+        
+        # Plot 1: Episode Rewards over Environment Steps
         for env_type in available_env_types:
             name = env_type['name']
             if name in processed_data:
                 data = processed_data[name]
-                plt.plot(data['steps_sm'], data['mean_sm'], label=env_type['label'], color=env_type['color'])
-                plt.fill_between(data['steps_sm'],
+                ax1.plot(data['steps_sm'], data['mean_sm'], label=env_type['label'], color=env_type['color'])
+                ax1.fill_between(data['steps_sm'],
                                data['mean_sm'] - data['std_sm'],
                                data['mean_sm'] + data['std_sm'],
                                alpha=0.2, color=env_type['color'])
 
-        plt.xlabel("Environment Steps (Frames)")
-        plt.ylabel("Episode Reward")
-        plt.title(f"Episode Rewards over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Episode Rewards ({stripped_scenario_folder})")
-        plt.legend(frameon=False)
-        plt.grid(True)
+        ax1.set_xlabel("Environment Steps (Frames)")
+        ax1.set_ylabel("Episode Reward")
+        ax1.set_title(f"Episode Rewards over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Episode Rewards ({stripped_scenario_folder})")
+        ax1.legend(frameon=False)
+        ax1.grid(True)
+        
+        # Plot 2: Timesteps per Episode
+        for env_type in available_env_types:
+            name = env_type['name']
+            if name in processed_data:
+                data = processed_data[name]
+                # Use timesteps per episode data directly
+                timesteps_mean = data['timesteps_per_episode_mean']
+                timesteps_std = data['timesteps_per_episode_std']
+                
+                episodes = np.arange(len(timesteps_mean))
+                ax2.plot(episodes, timesteps_mean, label=env_type['label'], color=env_type['color'])
+                ax2.fill_between(episodes,
+                               timesteps_mean - timesteps_std,
+                               timesteps_mean + timesteps_std,
+                               alpha=0.2, color=env_type['color'])
 
-        plot_file = os.path.join(plots_dir, f"averaged_rewards_over_steps_{stripped_scenario_folder}.png")
+        ax2.set_xlabel("Episode Number")
+        ax2.set_ylabel("Timesteps per Episode")
+        ax2.set_title(f"Timesteps per Episode over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Timesteps per Episode ({stripped_scenario_folder})")
+        ax2.legend(frameon=False)
+        ax2.grid(True)
+
+        plot_file = os.path.join(plots_dir, f"averaged_rewards_and_timesteps_{stripped_scenario_folder}.png")
+        plt.tight_layout()
         plt.savefig(plot_file)
         print(f"Combined plot saved for scenario {stripped_scenario_folder} at {plot_file}")
 
         # Plot cross validation results if enabled
         if cross_val_flag:
-            plt.figure(figsize=(12, 6))
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 6))
             cv_steps = np.arange(len(next(iter(processed_data.values()))['mean_sm'])) * CROSS_VAL_INTERVAL
 
-            # Plot training curves
+            # Plot 1: Training curves with cross validation
             for env_type in available_env_types:
                 name = env_type['name']
                 if name in processed_data:
                     data = processed_data[name]
-                    plt.plot(data['steps_sm'], data['mean_sm'], 
+                    ax1.plot(data['steps_sm'], data['mean_sm'], 
                             label=f"Train {env_type['label']}", color=env_type['color'])
-                    plt.fill_between(data['steps_sm'],
+                    ax1.fill_between(data['steps_sm'],
                                    data['mean_sm'] - data['std_sm'],
                                    data['mean_sm'] + data['std_sm'],
                                    alpha=0.2, color=env_type['color'])
@@ -225,21 +264,44 @@ def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cro
                         test_data = np.array(all_test_rewards[name])
                         test_mean = np.mean(test_data, axis=0)
                         test_std = np.std(test_data, axis=0)
-                        plt.plot(cv_steps, test_mean, 'o-', 
+                        ax1.plot(cv_steps, test_mean, 'o-', 
                                 label=f"CV {env_type['label']}", 
                                 color=env_type['color'], alpha=0.5, markersize=4)
-                        plt.fill_between(cv_steps,
+                        ax1.fill_between(cv_steps,
                                        test_mean - test_std,
                                        test_mean + test_std,
                                        alpha=0.1, color=env_type['color'])
 
-            plt.xlabel("Environment Steps")
-            plt.ylabel("Episode Reward")
-            plt.title(f"Training and Cross Validation Rewards over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Training and Cross Validation Rewards ({stripped_scenario_folder})")
-            plt.legend(frameon=False)
-            plt.grid(True)
+            ax1.set_xlabel("Environment Steps")
+            ax1.set_ylabel("Episode Reward")
+            ax1.set_title(f"Training and Cross Validation Rewards over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Training and Cross Validation Rewards ({stripped_scenario_folder})")
+            ax1.legend(frameon=False)
+            ax1.grid(True)
+            
+            # Plot 2: Timesteps per Episode (same as before)
+            for env_type in available_env_types:
+                name = env_type['name']
+                if name in processed_data:
+                    data = processed_data[name]
+                    # Use timesteps per episode data directly
+                    timesteps_mean = data['timesteps_per_episode_mean']
+                    timesteps_std = data['timesteps_per_episode_std']
+                    
+                    episodes = np.arange(len(timesteps_mean))
+                    ax2.plot(episodes, timesteps_mean, label=env_type['label'], color=env_type['color'])
+                    ax2.fill_between(episodes,
+                                   timesteps_mean - timesteps_std,
+                                   timesteps_mean + timesteps_std,
+                                   alpha=0.2, color=env_type['color'])
 
-            combined_plot_file = os.path.join(plots_dir, f"averaged_rewards_over_steps_{stripped_scenario_folder}_combined.png")
+            ax2.set_xlabel("Episode Number")
+            ax2.set_ylabel("Timesteps per Episode")
+            ax2.set_title(f"Timesteps per Episode over {len(SEEDS)} Seeds ({stripped_scenario_folder})" if len(SEEDS) > 1 else f"Timesteps per Episode ({stripped_scenario_folder})")
+            ax2.legend(frameon=False)
+            ax2.grid(True)
+
+            combined_plot_file = os.path.join(plots_dir, f"averaged_rewards_and_timesteps_{stripped_scenario_folder}_combined.png")
+            plt.tight_layout()
             plt.savefig(combined_plot_file)
             print(f"Combined training and cross validation plot saved for scenario {stripped_scenario_folder} at {combined_plot_file}")
 
@@ -252,27 +314,30 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(1e4)  # 50,000 timesteps for proper training
+    MAX_TOTAL_TIMESTEPS = int(1e4)  #100,000 timesteps for proper training
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "Save_Trained_Models"
+    save_folder = "Save_Trained_Models3"
     TESTING_FOLDERS_PATH = "Data/TRAINING/6ac-26-lilac/"
 
     # Define environment types
     env_types = ['myopic', 'proactive', 'reactive']
+    # env_types = ['proactive']
 
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
     all_folders_temp = [
-        "Data/TRAINING/6ac-26-lilac/"
-        # "Data\TRAINING\6ac-13-mauve"
+        "Data/TRAINING/3ac-130-green/"
+        #"Data/TRAINING/6ac-26-lilac/"
+        # "Data/TRAINING/6ac-13-mauve"
         # "Data/TRAINING/6ac-20-lilac/" 
-        # "Data\TRAINING\6ac-65-yellow"  
+        # "Data/TRAINING/6ac-65-yellow"
+          
         ]
 
     # main.py considers 3 different scenarios: 
