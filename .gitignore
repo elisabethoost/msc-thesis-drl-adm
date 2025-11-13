@@ -55,6 +55,12 @@ Save_Trained_Models/*/checkpoints/*.pt
 
 # Ignore the entire Save_Trained_Models directory
 Save_Trained_Models/
-Save_Trained_Models1/
-Save_Trained_Models2/
-Save_Trained_Models3/
+Save_Trained_Models*/
+
+# Ignore all ORIG_Trained_Models directories
+ORIG_Trained_Models*/
+
+# Ignore specific analysis files
+ANALYSIS_GUIDE.md
+check_termination_simple.py
+analyze_penalties.py
