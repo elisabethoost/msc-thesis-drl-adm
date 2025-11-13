@@ -6,7 +6,8 @@ import pandas as pd
 import torch
 from datetime import datetime
 from stable_baselines3 import DQN
-from src.environment import AircraftDisruptionEnv, AircraftDisruptionGreedyReactive
+from src.environment_rf import AircraftDisruptionEnv, AircraftDisruptionGreedyReactive
+from src.config_rf import *
 from scripts.utils import load_scenario_data 
 
 '''
@@ -18,7 +19,7 @@ Steps:
 5. run this script -> results are saved in logs/inference_metrics/
 6. run EO_final-results-examples-fixed.py -> results are saved in logs/inference_metrics/comparison_table_detailed.csv
 
-Uses GREEDY REACTIVE BASELINE from environment.py or GREEDY REACTIVE BASELINE from main-optimizer.py
+Uses GREEDY REACTIVE BASELINE from environment_rf.py or GREEDY REACTIVE BASELINE from main-optimizer.py
 '''
 
 def run_inference_dqn_single(model_path, scenario_folder, env_type, seed):
@@ -115,10 +116,10 @@ def run_exact_single(scenario_folder, env_type):
     # Initialize optimizer with loaded data
     # GREEDY REACTIVE BASELINE:
     if env_type == "greedy_reactive":
-        optimizer = AircraftDisruptionGreedyReactive(
     # # OPTIMAL EXACT BASELINE:
     # if env_type == "optimal_exact":
     #     optimizer = AircraftDisruptionExactInference(
+        optimizer = AircraftDisruptionGreedyReactive(
             aircraft_dict=aircraft_dict,
             flights_dict=flights_dict,
             rotations_dict=rotations_dict,
@@ -286,7 +287,7 @@ if __name__ == "__main__":
     
     # Output file - better naming structure
     # output_file = f"logs/inference_metrics/{data_folder_name}_{len(seeds)}_greedy_reactive.csv"
-    output_file = f"logs/inference_metrics/3ac-143-black-SaveTrainedModels5.csv" 
+    output_file = f"logs/inference_metrics/3ac-143-black-SaveTrainedModels5-rf.csv" 
     
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
