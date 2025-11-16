@@ -2,7 +2,7 @@ import os
 import numpy as np
 from datetime import datetime, timedelta
 import re
-from src.config import *
+from src.config_rf import *
 import csv
 import torch as th
 import math

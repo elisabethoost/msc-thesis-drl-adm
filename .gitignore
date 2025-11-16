@@ -64,3 +64,6 @@ ORIG_Trained_Models*/
 ANALYSIS_GUIDE.md
 check_termination_simple.py
 analyze_penalties.py
+train_dqn_modular_orig.py
+main_orig.py
+original_environment.py

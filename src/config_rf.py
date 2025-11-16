@@ -39,7 +39,7 @@ MAX_DELAY_PENALTY = 25000         # Restored from good config
 # Set to True to enable, False to disable
 # Start with only PENALTY_1_ENABLED = True, then gradually enable others
 PENALTY_1_DELAY_ENABLED = True          # Delay penalty
-PENALTY_2_CANCELLATION_ENABLED = False  # Cancellation penalty
+PENALTY_2_CANCELLATION_ENABLED = True  # Cancellation penalty
 PENALTY_3_INACTION_ENABLED = False      # Inaction penalty
 PENALTY_4_PROACTIVE_ENABLED = False     # Proactive penalty (last-minute actions)
 PENALTY_5_TIME_ENABLED = True          # Time penalty (cumulative)

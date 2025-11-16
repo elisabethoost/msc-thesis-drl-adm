@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import matplotlib.dates as mdates
 from scripts.utils import parse_time_with_day_offset, load_data
 from stable_baselines3.common.evaluation import evaluate_policy
-from src.config import *
+from src.config_rf import *
 import matplotlib.patches as patches
 from scripts.utils import *
 import re  # Make sure to import re at the top

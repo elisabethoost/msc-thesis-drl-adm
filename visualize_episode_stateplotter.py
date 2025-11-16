@@ -592,11 +592,11 @@ if __name__ == "__main__":
         scenario_folder = sys.argv[5] if len(sys.argv) > 5 else None
     else:
         # Default values (update these for your current run)
-        save_folder = "Save_Trained_Models37/3ac-130-green"
+        save_folder = "Save_Trained_Models40/3ac-130-green"
         env_type = "proactive"
         seed = 232323
-        episode_number = 4  # 0-indexed
-        scenario_folder = "Data/TRAINING/3ac-130-green/stochastic_Scenario_00084"  # Can be None to use first available
+        episode_number = 5  # 0-indexed
+        scenario_folder = "Data/TRAINING/3ac-130-green/stochastic_Scenario_00088"  # Can be None to use first available
     
     print(f"Visualization Configuration:")
     print(f"   Save Folder: {save_folder}")

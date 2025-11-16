@@ -68,10 +68,14 @@ class AircraftDisruptionEnv(gym.Env):
         this_day_flights = [flight_info for flight_info in flights_dict.values() if '+' not in flight_info['DepTime']]
 
         # Determine the earliest possible event in the environment
-        self.earliest_datetime = min(
-            min(datetime.strptime(config_dict['RecoveryPeriod']['StartDate'] + ' ' + flight_info['DepTime'], '%d/%m/%y %H:%M') for flight_info in this_day_flights),
-            self.start_datetime
-        )
+        # self.earliest_datetime = min(
+        #     min(datetime.strptime(config_dict['RecoveryPeriod']['StartDate'] + ' ' + flight_info['DepTime'], '%d/%m/%y %H:%M') for flight_info in this_day_flights),
+        #     self.start_datetime
+        # )
+        # Since data generation ensures flights don't depart before recovery period start (see create_data.py line 221),
+        # earliest_datetime should always equal start_datetime (recovery period start).
+        # We use start_datetime directly as the reference point for all time calculations.
+        self.earliest_datetime = self.start_datetime
 
         # Define observation and action spaces
         self.action_space_size = ACTION_SPACE_SIZE
@@ -407,6 +411,13 @@ class AircraftDisruptionEnv(gym.Env):
 
         Returns:
             tuple: A tuple containing the processed state, reward, terminated flag, truncated flag, and additional info.
+
+        Notes:
+            - Invalid actions: If the decoded action is invalid (i.e., (-1, -1)), the environment immediately returns
+              a reward of -1000, advances time by one timestep, and sets the following in the info dict:
+              "invalid_action": True and "invalid_action_reason". This should not occur if get_action_mask() is correct,
+              but can happen due to race conditions or masking bugs. The early check prevents crashes and makes the
+              penalty visible in analysis.
         """
 
         # Reset something_happened at the start of each step
@@ -422,6 +433,71 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Extract the action values from the action
         flight_action, aircraft_action = self.map_index_to_action(action_index)
+        
+        # Early check for invalid actions returned by map_index_to_action
+        # This should NOT happen if get_action_mask() is working correctly, but can occur due to:
+        # 1. Race conditions where flights are removed between mask creation and action execution
+        # 2. Bugs in action mask generation or flight removal logic
+        # This check prevents crashes and helps identify the root cause
+        if flight_action == -1 or aircraft_action == -1:
+            # Invalid action detected early - return negative reward immediately
+            # Store action info for debugging
+            reward = -1000  # Large negative reward for invalid actions
+            terminated = self.check_termination_criteria()
+            truncated = False
+            
+            # Proceed to next timestep
+            next_datetime = self.current_datetime + self.timestep
+            self.current_datetime = next_datetime
+            self.state = self._get_initial_state()
+            
+            processed_state, _ = self.process_observation(self.state)
+            
+            # Prepare info dict with action information for debugging
+            info = {
+                "flight_action": flight_action,
+                "aircraft_action": aircraft_action,
+                "action_index": action_index,
+                "invalid_action": True,
+                "invalid_action_reason": f"map_index_to_action({action_index}) returned (-1, -1) - flight not in flights_dict"
+            }
+            
+            # Still update info_after_step for consistency
+            self.info_after_step = {
+                "total_reward": reward,
+                "something_happened": False,
+                "current_time_minutes": (self.current_datetime - self.earliest_datetime).total_seconds() / 60,
+                "current_time_minutes_from_start": (self.current_datetime - self.start_datetime).total_seconds() / 60,
+                "start_datetime": str(self.start_datetime),
+                "earliest_datetime": str(self.earliest_datetime),
+                "current_datetime": str(self.current_datetime),
+                "flight_action": flight_action,
+                "aircraft_action": aircraft_action,
+                "action_index": action_index,
+                "invalid_action": True,
+                "invalid_action_reason": f"map_index_to_action({action_index}) returned (-1, -1)",
+                "penalties": {
+                    "delay_penalty_total": 0,
+                    "cancel_penalty": 0,
+                    "inaction_penalty": 0,
+                    "automatic_cancellation_penalty": 0,
+                    "proactive_penalty": 0,
+                    "time_penalty": 0,
+                    "final_conflict_resolution_reward": 0
+                },
+                "penalty_flags": {
+                    "penalty_1_delay_enabled": PENALTY_1_DELAY_ENABLED,
+                    "penalty_2_cancellation_enabled": PENALTY_2_CANCELLATION_ENABLED,
+                    "penalty_3_inaction_enabled": PENALTY_3_INACTION_ENABLED,
+                    "penalty_4_proactive_enabled": PENALTY_4_PROACTIVE_ENABLED,
+                    "penalty_5_time_enabled": PENALTY_5_TIME_ENABLED,
+                    "penalty_6_final_reward_enabled": PENALTY_6_FINAL_REWARD_ENABLED,
+                    "penalty_7_auto_cancellation_enabled": PENALTY_7_AUTO_CANCELLATION_ENABLED
+                }
+            }
+            info.update(self.info_after_step)
+            
+            return processed_state, reward, terminated, truncated, info
 
         # Check if the flight action is valid
         if DEBUG_MODE_ACTION:
@@ -474,6 +550,11 @@ class AircraftDisruptionEnv(gym.Env):
         # Merge info_after_step into info dict to pass penalty details through
         if info is None:
             info = {}
+        
+        # Always store action_index in info_after_step for accurate action tracking
+        # This ensures we track the original action index before flights are removed
+        self.info_after_step["action_index"] = action_index
+        
         info.update(self.info_after_step)
 
         return processed_state, reward, terminated, truncated, info
@@ -753,20 +834,9 @@ class AircraftDisruptionEnv(gym.Env):
                 - info (dict): Additional diagnostic information.
         """
         
-        # Handle invalid actions
-        if flight_action == -1 or aircraft_action == -1:
-            # Invalid action - give negative reward and continue
-            reward = -1000  # Large negative reward for invalid actions
-            terminated = self.check_termination_criteria()
-            truncated = False
-            
-            # Proceed to next timestep
-            next_datetime = self.current_datetime + self.timestep
-            self.current_datetime = next_datetime
-            self.state = self._get_initial_state()
-            
-            processed_state, _ = self.process_observation(self.state)
-            return processed_state, reward, terminated, truncated, {}
+        # Note: Invalid actions (-1, -1) are already handled in step() before this function is called
+        # This ensures we never receive invalid actions here, avoiding crashes in handle_no_conflicts()
+        # which would try to access self.flights_dict[-1] at line 761
 
         # store the departure time of the flight that is being acted upon (before the action is taken)
         if flight_action != 0:
@@ -1601,6 +1671,7 @@ class AircraftDisruptionEnv(gym.Env):
             # Metadata: time to departure
             "time_to_departure_minutes": time_to_departure,
             # Action information
+            "action_index": None,  # Will be set by step() function
             "flight_action": flight_action,
             "aircraft_action": aircraft_action,
             "original_departure_time": original_flight_action_departure_time,
@@ -2242,8 +2313,14 @@ class AircraftDisruptionEnv(gym.Env):
         aircraft_action = index % (len(self.aircraft_ids) + 1)
         
         # Validate that the flight exists
+        # NOTE: This validation should ideally never trigger if get_action_mask() is correct.
+        # If it does, it indicates a bug where:
+        # - Action mask included a flight that no longer exists, OR
+        # - Flight was removed between mask creation and action execution
+        # Logging this would help identify the root cause (disabled for performance)
         if flight_action > 0 and flight_action not in self.flights_dict:
             # If flight doesn't exist, return invalid action
+            # This suggests a bug in action mask generation or state management
             return -1, -1
             
         return flight_action, aircraft_action

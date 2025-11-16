@@ -500,14 +500,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.5e5)  #10000 timesteps for proper convergence (increased from 200k)
+    MAX_TOTAL_TIMESTEPS = int(0.3e5)  #10000 timesteps for proper convergence (increased from 200k)
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "Save_Trained_Models36"
+    save_folder = "Save_Trained_Models40"
     TESTING_FOLDERS_PATH = "Data/TRAINING/3ac-702-train/"
 
     # Define environment types

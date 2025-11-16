@@ -490,13 +490,29 @@ def run_train_dqn_both_timesteps(
                             # During exploration (50% the conflicted flights, 50% random)
                             if np.random.rand() < 0.5:
                                 # Get current conflicts and use them to guide exploration
+                                # Prefer actions that operate on conflicted flights (any aircraft); rely on env scheduling
                                 current_conflicts = env.get_current_conflicts()
                                 if current_conflicts:
-                                    # Get action mask from current environment
-                                    action_mask = env.get_action_mask() 
-                                    # Choose random action from valid actions in the restricted mask
-                                    valid_actions = np.where(action_mask == 1)[0]
-                                    action = np.random.choice(valid_actions)
+                                    # Build set of conflicted flight IDs from conflict tuples: (aircraft_id, flight_id, dep, arr)
+                                    conflicted_flight_ids = set()
+                                    for conf in current_conflicts:
+                                        if isinstance(conf, tuple) and len(conf) >= 2:
+                                            conflicted_flight_ids.add(conf[1])
+
+                                    # Get current action mask
+                                    action_mask = env.get_action_mask()
+                                    all_valid = np.where(action_mask == 1)[0]
+                                    ac_count_plus_one = len(env.aircraft_ids) + 1
+
+                                    # Restrict to actions whose flight component is conflicted (plus allow (0,0))
+                                    restricted = [
+                                        idx for idx in all_valid
+                                        if idx == 0 or (idx // ac_count_plus_one) in conflicted_flight_ids
+                                    ]
+
+                                    # Use restricted actions if any exist, otherwise fall back to all valid
+                                    candidates = restricted if len(restricted) > 0 else all_valid
+                                    action = np.random.choice(candidates)
                                     action = np.array(action).reshape(1, -1)
                                     action_reason = "conflict-guided-random"
                                 else:
@@ -628,8 +644,16 @@ def run_train_dqn_both_timesteps(
                     scenario_ended = info.get("scenario_ended", False)  # Get scenario_ended flag
                     penalty_flags = info.get("penalty_flags", {})  # Get penalty enable flags
                     
-                    # Decode action to (flight, aircraft) pair
-                    flight_action, aircraft_action = env.map_index_to_action(action.item())
+                    # Get decoded action from info dict (stored by env.step) if available
+                    # This ensures we use the actual action that was executed, not re-decode after flights may have been removed
+                    flight_action = info.get("flight_action", None)
+                    aircraft_action = info.get("aircraft_action", None)
+                    action_index_from_info = info.get("action_index", None)
+                    
+                    # Fallback: decode from action index if not in info (for backward compatibility)
+                    if flight_action is None or aircraft_action is None:
+                        flight_action, aircraft_action = env.map_index_to_action(action.item())
+                        action_index_from_info = action.item()
                     
                     # Extract unavailability probabilities from info
                     unavailabilities_probabilities = info.get("unavailabilities_probabilities", {})
@@ -637,10 +661,10 @@ def run_train_dqn_both_timesteps(
                     # Store detailed step information for visualization (after all variables are calculated)
                     step_info = {
                         "step": timesteps_local,
-                        "action": action.item(),
+                        "action": action.item(),  # Original action index chosen by agent
                         "action_decoded": [flight_action, aircraft_action],  # Add decoded action as [flight, aircraft]
-                        "flight_action": flight_action,  # Flight ID (0 = no action/cancellation)
-                        "aircraft_action": aircraft_action,  # Aircraft ID (0 = no action/cancellation)
+                        "flight_action": flight_action,  # Flight ID (0 = no action/cancellation, -1 = invalid)
+                        "aircraft_action": aircraft_action,  # Aircraft ID (0 = no action/cancellation, -1 = invalid)
                         "action_reason": action_reason,
                         "epsilon": epsilon,
                         "reward": reward, # reward for this step

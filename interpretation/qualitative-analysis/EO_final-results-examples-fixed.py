@@ -135,7 +135,7 @@ def extract_disruption_stats(scenario_data):
 
 # Path to the scenarios folder
 scenario_folder_path = "logs/scenarios/"
-latest_folder = "scenario_folder_scenario_77.json" # Training/6ac-26-lilac
+latest_folder = "scenario_folder_scenario_85.json" # Training/6ac-26-lilac
 # latest_folder = "scenario_folder_scenario_77.json" # Testing/6ac-65-yellow
 
 file_path = os.path.join(scenario_folder_path, latest_folder)
@@ -179,7 +179,7 @@ print(scenarios_df)
 # Load and process inference results
 scenario_folder_path = "logs/inference_metrics/"
 # unpack results_df
-results_df = pd.read_csv(os.path.join(scenario_folder_path, f"action_logic.csv"))
+results_df = pd.read_csv(os.path.join(scenario_folder_path, f"3ac-143-black-SaveTrainedModels5-rf.csv"))
 
 # Merge scenario-level info from scenarios_df into results_df
 merged_df = results_df.merge(scenarios_df, on='Scenario', how='left')
