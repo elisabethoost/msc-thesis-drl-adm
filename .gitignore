@@ -59,6 +59,7 @@ Save_Trained_Models*/
 
 # Ignore all ORIG_Trained_Models directories
 ORIG_Trained_Models*/
+Final_Model_*/
 
 # Ignore specific analysis files
 ANALYSIS_GUIDE.md
@@ -67,3 +68,5 @@ analyze_penalties.py
 train_dqn_modular_orig.py
 main_orig.py
 original_environment.py
+ARTICLE_STRUCTURE.md
+ARTICLE_WRITING.md	
