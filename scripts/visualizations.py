@@ -933,7 +933,7 @@ def plot_epsilon_decay(n_episodes, epsilon_start, epsilon_min, decay_rate):
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from src.environment import AircraftDisruptionEnv
+from src.environment_rf import AircraftDisruptionEnv
 import time
 
 def calculate_total_training_timesteps(training_folders_path, n_episodes):

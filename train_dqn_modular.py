@@ -1,9 +1,5 @@
-print("Starting imports...")
 import sys
-print(f"Python path: {sys.path}")
-print("Importing torch...")
 import torch as th
-print("Torch imported successfully!")
 import os
 import warnings
 import datetime
@@ -322,6 +318,13 @@ def run_train_dqn_both_timesteps(
         
         # Reset the environment to initialize the observation space
         minimal_env.reset()
+        stacked_obs_length = minimal_env.observation_space['state'].shape[0]
+        single_frame_length = getattr(minimal_env, "single_observation_length", stacked_obs_length)
+        obs_stack_size = getattr(minimal_env, "obs_stack_size", 1)
+        print(f"Observation vector (stacked): {stacked_obs_length} dims | single frame: {single_frame_length} | stack: {obs_stack_size}")
+        training_metadata["stacked_observation_length"] = int(stacked_obs_length)
+        training_metadata["single_frame_observation_length"] = int(single_frame_length)
+        training_metadata["observation_stack_size"] = int(obs_stack_size)
         
         # Create the model with the correct observation space - OPTIMIZED FOR STABILITY
         model = DQN(
@@ -347,6 +350,13 @@ def run_train_dqn_both_timesteps(
 
         logger = configure()
         model._logger = logger
+
+        # Confirm device being used by the model
+        if th.cuda.is_available():
+            print(f"[CONFIRMED] Model is using NVIDIA GPU: {th.cuda.get_device_name(0)}")
+            # print(f"[CONFIRMED] All training operations will run on GPU")
+        else:
+            print("[WARNING] Model is using CPU (no GPU available)")
 
         print("Initializing training monitor...")
         # Initialize training monitor
@@ -640,9 +650,12 @@ def run_train_dqn_both_timesteps(
                     proactive_penalty = penalties_dict.get("proactive_penalty", 0.0)
                     time_penalty = penalties_dict.get("time_penalty", 0.0)
                     final_conflict_resolution_reward = penalties_dict.get("final_conflict_resolution_reward", 0.0)
+                    probability_resolution_bonus = penalties_dict.get("probability_resolution_bonus", 0.0)  # Reward #8
+                    low_confidence_action_penalty = penalties_dict.get("low_confidence_action_penalty", 0.0)  # Penalty #9
                     something_happened = info.get("something_happened", False)
                     scenario_ended = info.get("scenario_ended", False)  # Get scenario_ended flag
                     penalty_flags = info.get("penalty_flags", {})  # Get penalty enable flags
+                    delay_penalty_minutes = info.get("delay_penalty_minutes", 0)  # Get delay minutes for display
                     
                     # Get decoded action from info dict (stored by env.step) if available
                     # This ensures we use the actual action that was executed, not re-decode after flights may have been removed
@@ -671,14 +684,25 @@ def run_train_dqn_both_timesteps(
                         "something_happened": something_happened,  # Track if action actually changed something
                         "scenario_ended": scenario_ended,  # Track if scenario ended and final reward was calculated
                         "penalties": {
-                            "delay": delay_penalty_total,
-                            "cancellation": cancel_penalty,
-                            "inaction": inaction_penalty,
-                            "automatic_cancellation": automatic_cancellation_penalty,
-                            "proactive": proactive_penalty,
-                            "time": time_penalty,
+                            "delay": delay_penalty_total,  # Old format for backward compatibility
+                            "delay_penalty_total": delay_penalty_total,  # New format
+                            "cancellation": cancel_penalty,  # Old format
+                            "cancel_penalty": cancel_penalty,  # New format
+                            "inaction": inaction_penalty,  # Old format
+                            "inaction_penalty": inaction_penalty,  # New format
+                            "automatic_cancellation": automatic_cancellation_penalty,  # Old format
+                            "automatic_cancellation_penalty": automatic_cancellation_penalty,  # New format
+                            "proactive": proactive_penalty,  # Old format
+                            "proactive_penalty": proactive_penalty,  # New format
+                            "time": time_penalty,  # Old format
+                            "time_penalty": time_penalty,  # New format
                             "final_conflict_resolution_reward": final_conflict_resolution_reward,
+                            "probability_resolution_bonus": probability_resolution_bonus,  # Reward #8
+                            "low_confidence_action_penalty": low_confidence_action_penalty,  # Penalty #9
                         },
+                        "delay_penalty_minutes": delay_penalty_minutes,  # Delay minutes for display
+                        "current_time_minutes": info.get("current_time_minutes", None),  # Current time in minutes
+                        "current_time_minutes_from_start": info.get("current_time_minutes_from_start", None),  # Time from start
                         "total_reward_so_far": total_reward_local + reward, # total reward till now for this day/scenario/schedule in this episode
                         "current_datetime": env.current_datetime, # where we are in the recovery schedule
                         "swapped_flights": env.swapped_flights.copy(),

@@ -3,6 +3,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from datetime import datetime, timedelta
+from collections import deque
 from src.config_rf import *
 from scripts.utils import *
 import time
@@ -44,6 +45,7 @@ class AircraftDisruptionEnv(gym.Env):
         self.end_datetime = datetime.strptime(f"{end_date} {end_time}", '%d/%m/%y %H:%M')
         self.timestep = timedelta(hours=TIMESTEP_HOURS)
         self.timestep_minutes = TIMESTEP_HOURS * 60
+        self.recovery_period_minutes = max(1, (self.end_datetime - self.start_datetime).total_seconds() / 60)
 
         # Aircraft information and indexing
         self.aircraft_ids = list(aircraft_dict.keys()) # list of aircraft ids e.g. ['B737#1', 'A320#2', 'B737#2']
@@ -80,10 +82,18 @@ class AircraftDisruptionEnv(gym.Env):
         # Define observation and action spaces
         self.action_space_size = ACTION_SPACE_SIZE
         self.action_space = spaces.Discrete(self.action_space_size)
+        self.enable_temporal_features = ENABLE_TEMPORAL_DERIVED_FEATURES
+        self.num_temporal_features = DERIVED_FEATURES_PER_AIRCRAFT if self.enable_temporal_features else 0
+        self.obs_stack_size = max(1, OBS_STACK_SIZE)
+        self.base_state_vector_length = self.rows_state_space * self.columns_state_space
+        self.temporal_feature_length = self.max_aircraft * self.num_temporal_features
+        self.single_observation_length = self.base_state_vector_length + self.temporal_feature_length
+        self.stacked_state_length = self.single_observation_length * self.obs_stack_size
+
         self.observation_space = spaces.Dict({
             'state': spaces.Box(
                 low=-np.inf, high=np.inf,
-                shape=(self.rows_state_space * self.columns_state_space,),
+                shape=(self.stacked_state_length,),
                 dtype=np.float32
             ),
             'action_mask': spaces.Box(
@@ -125,10 +135,15 @@ class AircraftDisruptionEnv(gym.Env):
         self.unavailabilities_dict = {}
 
         self.info_after_step = {}
+        self.last_action_probability = None
+        self.last_action_aircraft_id = None
+        self.pre_action_probabilities = {}
 
         # Initialize the environment state without generating probabilities
         self.current_datetime = self.start_datetime
         self.something_happened = False  # Track if current action actually changed something
+        self.previous_probabilities = {aircraft_id: 0.0 for aircraft_id in self.aircraft_ids}
+        self.state_history = deque(maxlen=self.obs_stack_size)
         self.state = self._get_initial_state()
 
         # Initialize eligible flights for conflict resolution bonus
@@ -153,7 +168,9 @@ class AircraftDisruptionEnv(gym.Env):
             "proactive_penalty": 0,
             "time_penalty": 0,
             "final_conflict_resolution_reward": 0,
-            "automatic_cancellation_penalty": 0
+            "automatic_cancellation_penalty": 0,
+            "probability_resolution_bonus": 0,
+            "low_confidence_action_penalty": 0
         }
  
         # Initialize tail swap tracking
@@ -234,6 +251,7 @@ class AircraftDisruptionEnv(gym.Env):
                 'StartTime': unavail_start_minutes,
                 'EndTime': unavail_end_minutes
             }
+            self.previous_probabilities[aircraft_id] = 0.0 if np.isnan(breakdown_probability) else breakdown_probability
 
             # # In the myopic env, the info for uncertain breakdowns is not shown
             # if breakdown_probability != 1.0 and self.env_type == 'myopic':
@@ -316,17 +334,28 @@ class AircraftDisruptionEnv(gym.Env):
         Does NOT modify internal state or unavailabilities_dict.
         Returns an observation suitable for the agent."""
         state_to_observe = state.copy()
+        current_time_minutes = (self.current_datetime - self.start_datetime).total_seconds() / 60
+        derived_feature_rows = []
 
-        for idx, aircraft_id in enumerate(self.aircraft_ids):
+        for idx in range(self.max_aircraft):
+            if idx >= len(self.aircraft_ids):
+                if self.num_temporal_features > 0:
+                    derived_feature_rows.append(np.full(self.num_temporal_features, np.nan, dtype=np.float32))
+                continue
+
+            aircraft_id = self.aircraft_ids[idx]
             # Get the real, internal probability and times from the state
-            breakdown_probability = state_to_observe[idx + 1, 1]
-            unavail_start_minutes = state_to_observe[idx + 1, 2]
-            unavail_end_minutes = state_to_observe[idx + 1, 3]
+            # breakdown_probability = state_to_observe[idx + 1, 1]
+            # unavail_start_minutes = state_to_observe[idx + 1, 2]
+            # unavail_end_minutes = state_to_observe[idx + 1, 3]
+            real_breakdown_probability = state[idx + 1, 1]
+            real_unavail_start_minutes = state[idx + 1, 2]
+            real_unavail_end_minutes = state[idx + 1, 3]
 
             # Make copies for observation only
-            obs_breakdown_probability = breakdown_probability
-            obs_unavail_start_minutes = unavail_start_minutes
-            obs_unavail_end_minutes = unavail_end_minutes
+            obs_breakdown_probability = real_breakdown_probability
+            obs_unavail_start_minutes = real_unavail_start_minutes
+            obs_unavail_end_minutes = real_unavail_end_minutes
 
             # Apply env_type logic to these observed values ONLY
             if self.env_type == 'reactive':
@@ -349,6 +378,37 @@ class AircraftDisruptionEnv(gym.Env):
             state_to_observe[idx + 1, 2] = obs_unavail_start_minutes
             state_to_observe[idx + 1, 3] = obs_unavail_end_minutes
 
+            if self.enable_temporal_features and self.num_temporal_features > 0:
+                aircraft_features = self._get_aircraft_temporal_features(
+                    aircraft_id,
+                    real_breakdown_probability,
+                    real_unavail_start_minutes,
+                    real_unavail_end_minutes,
+                    current_time_minutes
+                )
+
+                features_for_observation = aircraft_features.copy()
+                if self.env_type == 'reactive':
+                    features_for_observation[:] = np.nan
+                elif self.env_type == 'myopic':
+                    if np.isnan(obs_breakdown_probability) or obs_breakdown_probability != 1.0:
+                        features_for_observation[:] = np.nan
+                elif np.isnan(obs_breakdown_probability):
+                    features_for_observation[:] = np.nan
+
+                derived_feature_rows.append(features_for_observation)
+
+            # Update previous probability tracker using real (unmasked) probability
+            self.previous_probabilities[aircraft_id] = 0.0 if np.isnan(real_breakdown_probability) else real_breakdown_probability
+
+        if self.enable_temporal_features and self.num_temporal_features > 0:
+            # Pad derived features if fewer aircraft were processed
+            while len(derived_feature_rows) < self.max_aircraft:
+                derived_feature_rows.append(np.full(self.num_temporal_features, np.nan, dtype=np.float32))
+            derived_features_vector = np.array(derived_feature_rows, dtype=np.float32).flatten()
+        else:
+            derived_features_vector = np.array([], dtype=np.float32)
+
         # Create a mask where 1 indicates valid values, 0 indicates NaN
         mask = np.where(np.isnan(state_to_observe), 0, 1)
         # Replace NaN with a dummy value
@@ -356,14 +416,21 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Flatten both state and mask
         state_flat = state_to_observe.flatten()
-        mask_flat = mask.flatten()
+
+        if derived_features_vector.size > 0:
+            derived_features_vector = np.nan_to_num(derived_features_vector, nan=DUMMY_VALUE)
+            single_state_vector = np.concatenate([state_flat, derived_features_vector]).astype(np.float32)
+        else:
+            single_state_vector = state_flat.astype(np.float32)
+
+        stacked_state = self._stack_observation(single_state_vector)
 
         # Use get_action_mask to generate the action mask
         action_mask = self.get_action_mask()
 
         # Return the observation dictionary without modifying internal structures
         obs_with_mask = {
-            'state': state_flat,
+            'state': stacked_state,
             'action_mask': action_mask
         }
         return obs_with_mask, state_to_observe
@@ -433,6 +500,14 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Extract the action values from the action
         flight_action, aircraft_action = self.map_index_to_action(action_index)
+        self.last_action_probability = None
+        self.last_action_aircraft_id = None
+        if aircraft_action > 0 and aircraft_action <= len(self.aircraft_ids):
+            acted_aircraft_id = self.aircraft_ids[aircraft_action - 1]
+            self.last_action_aircraft_id = acted_aircraft_id
+            prob_snapshot = self.unavailabilities_dict.get(acted_aircraft_id, {}).get('Probability', np.nan)
+            if not np.isnan(prob_snapshot):
+                self.last_action_probability = float(prob_snapshot)
         
         # Early check for invalid actions returned by map_index_to_action
         # This should NOT happen if get_action_mask() is working correctly, but can occur due to:
@@ -523,6 +598,16 @@ class AircraftDisruptionEnv(gym.Env):
         # Get pre-action conflicts
         # Gets probabilities ac unavailitbilities that have not yet been resolved (they are neither 1 or 0 but 0<p<1)
         pre_action_conflicts = self.get_current_conflicts()
+        # Keep track of which flights were actually in conflict before the action
+        self.pre_action_conflict_flights = set()
+        for conflict in pre_action_conflicts:
+            if isinstance(conflict, (tuple, list)) and len(conflict) >= 2:
+                self.pre_action_conflict_flights.add(conflict[1])
+        # Snapshot probabilities BEFORE they are advanced, so reward #8 can use the pre-action value
+        self.pre_action_probabilities = {
+            aircraft_id: self.unavailabilities_dict.get(aircraft_id, {}).get('Probability', np.nan)
+            for aircraft_id in self.aircraft_ids
+        }
         unresolved_uncertainties = self.get_unresolved_uncertainties()
 
         # print(f"pre_action_conflicts: {pre_action_conflicts}")
@@ -1468,19 +1553,30 @@ class AircraftDisruptionEnv(gym.Env):
             print(f"Calculating reward for action: flight {flight_action}, aircraft {aircraft_action}")
 
         # 1. Delay Penalty: Penalize additional minutes of delay
+        # NOTE: Delays solve conflicts, so they should be minimally penalized (or not at all)
+        # Only penalize delays that exceed a threshold (e.g., >3 hours) to slightly discourage very long delays
         delay_penalty_minutes = sum(
             self.environment_delayed_flights[flight_id] - self.penalized_delays.get(flight_id, 0)
             for flight_id in self.environment_delayed_flights
         )
         self.scenario_wide_delay_minutes += delay_penalty_minutes
+        
         if PENALTY_1_DELAY_ENABLED:
-            delay_penalty_total = min(delay_penalty_minutes * DELAY_MINUTE_PENALTY, MAX_DELAY_PENALTY)
+            # Only penalize delays exceeding the threshold (e.g., >3 hours)
+            # Delays below threshold are free - they solve conflicts, which is good
+            delay_minutes_above_threshold = max(0, delay_penalty_minutes - DELAY_PENALTY_THRESHOLD_MINUTES)
+            delay_penalty_total = min(delay_minutes_above_threshold * DELAY_MINUTE_PENALTY, MAX_DELAY_PENALTY)
         else:
             delay_penalty_total = 0
 
         if DEBUG_MODE_REWARD:
             status = "ENABLED" if PENALTY_1_DELAY_ENABLED else "DISABLED"
-            print(f"  [Penalty #1: {status}] -{delay_penalty_total} penalty for {delay_penalty_minutes} minutes of additional delay (capped at {MAX_DELAY_PENALTY})")
+            if PENALTY_1_DELAY_ENABLED and delay_penalty_minutes > DELAY_PENALTY_THRESHOLD_MINUTES:
+                print(f"  [Penalty #1: {status}] -{delay_penalty_total} penalty for {delay_minutes_above_threshold} minutes of delay above {DELAY_PENALTY_THRESHOLD_MINUTES}min threshold (total delay: {delay_penalty_minutes}min)")
+            elif PENALTY_1_DELAY_ENABLED:
+                print(f"  [Penalty #1: {status}] No delay penalty (delay {delay_penalty_minutes}min is below {DELAY_PENALTY_THRESHOLD_MINUTES}min threshold - delays solve conflicts!)")
+            else:
+                print(f"  [Penalty #1: {status}] Delay penalty disabled (delays solve conflicts, so no penalty)")
 
         # 2. Cancellation Penalty: Penalize newly cancelled flights
         if PENALTY_2_CANCELLATION_ENABLED:
@@ -1529,23 +1625,19 @@ class AircraftDisruptionEnv(gym.Env):
             if proactive_penalty > 0:
                 print(f"  [Penalty #4: {status}] -{proactive_penalty} penalty for last-minute action ({time_to_departure:.1f} minutes before departure)")
 
-        # 5. Time Penalty: Small penalty for simulation progression
-        # Calculate time penalty from start of recovery period, not earliest_datetime
-        # time_penalty_minutes should be the cumulative minutes since recovery period started
-        time_penalty_minutes = (self.current_datetime - self.start_datetime).total_seconds() / 60
+        # 5. Time Penalty: Small penalty per timestep to encourage faster resolution
+        # Applied per step so that scenarios taking more steps get proportionally more penalty
+        # This encourages the agent to resolve conflicts efficiently
         if PENALTY_5_TIME_ENABLED:
-            time_penalty = time_penalty_minutes * TIME_MINUTE_PENALTY
+            time_penalty = TIMESTEP_HOURS * 60 * TIME_MINUTE_PENALTY  # Penalty per timestep
         else:
             time_penalty = 0
 
         if DEBUG_MODE_REWARD:
             status = "ENABLED" if PENALTY_5_TIME_ENABLED else "DISABLED"
             print(f"  [Penalty #5: {status}] Time penalty calculation:")
-            print(f"    current_datetime: {self.current_datetime}")
-            print(f"    start_datetime: {self.start_datetime}")
-            print(f"    earliest_datetime: {self.earliest_datetime}")
-            print(f"    time_penalty_minutes: {time_penalty_minutes:.1f} minutes ({time_penalty_minutes/60:.1f} hours)")
-            print(f"  -{time_penalty} penalty for time progression")
+            print(f"    Penalty per timestep: {TIMESTEP_HOURS * 60} minutes * {TIME_MINUTE_PENALTY} = {time_penalty:.4f}")
+            print(f"  -{time_penalty} penalty for this timestep")
 
         # 6. Final Resolution Reward: Bonus for resolving real conflicts at scenario end
         final_conflict_resolution_reward = 0
@@ -1593,6 +1685,68 @@ class AircraftDisruptionEnv(gym.Env):
             status = "ENABLED" if PENALTY_7_AUTO_CANCELLATION_ENABLED else "DISABLED"
             print(f"  [Penalty #7: {status}] -{automatic_cancellation_penalty} penalty for {automatic_cancellation_penalty_count} automatic cancellations")
             
+        # 8. Probability-aware shaping: reward resolving high-probability conflicts
+        # Only give bonus if agent took an action that resolved conflicts (not if conflicts disappeared naturally)
+        probability_resolution_bonus = 0
+        resolved_probability_total = 0
+        if (PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED 
+            and resolved_conflicts 
+            and PROBABILITY_RESOLUTION_BONUS_SCALE > 0
+            and flight_action != 0  # Agent must have taken an action
+            and self.something_happened):  # Action must have changed the state
+            for conflict in resolved_conflicts:
+                # Handle both 2-tuple (aircraft_id, flight_id) and 4-tuple (aircraft_id, flight_id, flight_dep, flight_arr) formats
+                if isinstance(conflict, (tuple, list)) and len(conflict) >= 2:
+                    aircraft_id = conflict[0]
+                    conflict_flight_id = conflict[1]
+                else:
+                    aircraft_id = conflict
+                    conflict_flight_id = None
+
+                # Only reward conflicts directly resolved by the acted flight
+                if conflict_flight_id is None or conflict_flight_id != flight_action:
+                    continue
+                # Do not reward conflicts that were auto-cancelled by the environment
+                if conflict_flight_id in self.automatically_cancelled_flights:
+                    continue
+
+                # Use the probability snapshot from BEFORE uncertainties were processed this step
+                pre_prob = np.nan
+                if hasattr(self, "pre_action_probabilities"):
+                    pre_prob = self.pre_action_probabilities.get(aircraft_id, np.nan)
+                if np.isnan(pre_prob):
+                    pre_prob = self.unavailabilities_dict.get(aircraft_id, {}).get('Probability', np.nan)
+                if np.isnan(pre_prob):
+                    pre_prob = 1.0  # fallback: treat as certain if unknown
+
+                resolved_probability_total += max(0.0, pre_prob)
+
+            probability_resolution_bonus = resolved_probability_total * PROBABILITY_RESOLUTION_BONUS_SCALE
+
+        if DEBUG_MODE_REWARD:
+            status = "ENABLED" if PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED else "DISABLED"
+            if probability_resolution_bonus > 0:
+                print(f"  [Reward #8: {status}] +{probability_resolution_bonus:.2f} bonus for resolving conflicts with total probability {resolved_probability_total:.2f}")
+
+        # 9. Low-confidence action penalty: discourage acting on low-probability disruptions when nothing is resolved
+        low_confidence_action_penalty = 0
+        if PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED:
+            if (
+                flight_action != 0
+                and self.something_happened
+                and self.last_action_probability is not None
+                and self.last_action_probability < LOW_CONFIDENCE_ACTION_THRESHOLD
+                and hasattr(self, "pre_action_conflict_flights")
+                and flight_action in self.pre_action_conflict_flights
+                and len(resolved_conflicts) == 0
+            ):
+                low_confidence_action_penalty = LOW_CONFIDENCE_ACTION_PENALTY
+
+        if DEBUG_MODE_REWARD:
+            status = "ENABLED" if PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED else "DISABLED"
+            if low_confidence_action_penalty > 0:
+                print(f"  [Penalty #9: {status}] -{low_confidence_action_penalty} penalty for acting on low-confidence disruption (prob={self.last_action_probability:.2f} < {LOW_CONFIDENCE_ACTION_THRESHOLD}) without resolving conflicts")
+
         # Reset tail swap tracking for next step
         self.tail_swap_happened = False
 
@@ -1608,7 +1762,9 @@ class AircraftDisruptionEnv(gym.Env):
             - automatic_cancellation_penalty
             - proactive_penalty
             - time_penalty
+            - low_confidence_action_penalty
             + final_conflict_resolution_reward  # Only positive reward: final resolution
+            + probability_resolution_bonus
         )
 
         # Update scenario-wide reward components
@@ -1619,7 +1775,9 @@ class AircraftDisruptionEnv(gym.Env):
             "proactive_penalty": self.scenario_wide_reward_components.get("proactive_penalty", 0) - proactive_penalty,
             "time_penalty": self.scenario_wide_reward_components["time_penalty"] - time_penalty,
             "final_conflict_resolution_reward": self.scenario_wide_reward_components["final_conflict_resolution_reward"] + final_conflict_resolution_reward,
-            "automatic_cancellation_penalty": self.scenario_wide_reward_components["automatic_cancellation_penalty"] - automatic_cancellation_penalty
+            "automatic_cancellation_penalty": self.scenario_wide_reward_components["automatic_cancellation_penalty"] - automatic_cancellation_penalty,
+            "probability_resolution_bonus": self.scenario_wide_reward_components["probability_resolution_bonus"] + probability_resolution_bonus,
+            "low_confidence_action_penalty": self.scenario_wide_reward_components["low_confidence_action_penalty"] - low_confidence_action_penalty
         })
 
         # Store reward components in state
@@ -1631,9 +1789,12 @@ class AircraftDisruptionEnv(gym.Env):
         self.state[0, 10] = time_penalty
         self.state[0, 11] = automatic_cancellation_penalty
         self.state[0, 12] = final_conflict_resolution_reward
+        self.state[0, 13] = probability_resolution_bonus
+        self.state[0, 14] = low_confidence_action_penalty
 
-        # Round final reward
-        reward = round(reward, 1)
+        # Round final reward to 4 decimal places to preserve small penalty values (e.g., time penalty 0.003)
+        # This ensures the DQN receives actual penalty values, not rounded zeros
+        reward = round(reward, 4)
 
         if DEBUG_MODE_REWARD:
             print("--------------------------------")
@@ -1662,6 +1823,7 @@ class AircraftDisruptionEnv(gym.Env):
             "earliest_datetime": str(self.earliest_datetime),  # Add for debugging
             "current_datetime": str(self.current_datetime),  # Add for debugging
             "resolved_conflicts_count": len(resolved_conflicts),
+            "resolved_conflicts_entries": [tuple(conflict) for conflict in resolved_conflicts],
             "remaining_conflicts_count": len(remaining_conflicts),
             # Metadata: delay information (raw minutes and flags, not penalty values)
             "delay_penalty_minutes": delay_penalty_minutes,
@@ -1687,7 +1849,9 @@ class AircraftDisruptionEnv(gym.Env):
                 "automatic_cancellation_penalty": automatic_cancellation_penalty,
                 "proactive_penalty": proactive_penalty,
                 "time_penalty": time_penalty,
-                "final_conflict_resolution_reward": final_conflict_resolution_reward
+                "final_conflict_resolution_reward": final_conflict_resolution_reward,
+                "probability_resolution_bonus": probability_resolution_bonus,
+                "low_confidence_action_penalty": low_confidence_action_penalty
             },
             # Penalty enable flags (for debugging/verification)
             "penalty_flags": {
@@ -1697,11 +1861,68 @@ class AircraftDisruptionEnv(gym.Env):
                 "penalty_4_proactive_enabled": PENALTY_4_PROACTIVE_ENABLED,
                 "penalty_5_time_enabled": PENALTY_5_TIME_ENABLED,
                 "penalty_6_final_reward_enabled": PENALTY_6_FINAL_REWARD_ENABLED,
-                "penalty_7_auto_cancellation_enabled": PENALTY_7_AUTO_CANCELLATION_ENABLED
+                "penalty_7_auto_cancellation_enabled": PENALTY_7_AUTO_CANCELLATION_ENABLED,
+                "penalty_8_probability_resolution_bonus_enabled": PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED,
+                "penalty_9_low_confidence_action_enabled": PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED
             }
         }
 
         return reward
+
+    def _get_aircraft_temporal_features(self, aircraft_id, probability, start_minutes, end_minutes, current_time_minutes):
+        """Derive engineered temporal features for a single aircraft timeline."""
+        if not self.enable_temporal_features or self.num_temporal_features == 0:
+            return np.array([], dtype=np.float32)
+
+        features = np.full(self.num_temporal_features, np.nan, dtype=np.float32)
+
+        time_to_start = np.nan if np.isnan(start_minutes) else start_minutes - current_time_minutes
+        time_to_end = np.nan if np.isnan(end_minutes) else end_minutes - current_time_minutes
+
+        previous_prob = self.previous_probabilities.get(aircraft_id, 0.0)
+        if np.isnan(probability):
+            probability_slope = 0.0
+            probability_for_norm = 0.0
+        else:
+            probability_slope = float(probability) - float(previous_prob)
+            probability_for_norm = float(probability)
+
+        normalized_time_to_start = np.nan
+        if not np.isnan(time_to_start):
+            normalized_time_to_start = time_to_start / self.recovery_period_minutes
+
+        if self.num_temporal_features >= 1:
+            features[0] = time_to_start if not np.isnan(time_to_start) else np.nan
+        if self.num_temporal_features >= 2:
+            features[1] = time_to_end if not np.isnan(time_to_end) else np.nan
+        if self.num_temporal_features >= 3:
+            features[2] = probability_slope
+        if self.num_temporal_features >= 4:
+            features[3] = normalized_time_to_start
+        if self.num_temporal_features >= 5:
+            features[4] = probability_for_norm
+
+        return features
+
+    def _stack_observation(self, single_state_vector):
+        """Return a stacked observation vector composed of the most recent frames."""
+        if self.obs_stack_size == 1:
+            return single_state_vector
+
+        if len(self.state_history) == 0:
+            padding = np.full_like(single_state_vector, STACKING_PADDING_VALUE, dtype=np.float32)
+            for _ in range(self.obs_stack_size - 1):
+                self.state_history.append(padding.copy())
+
+        self.state_history.append(single_state_vector.copy())
+
+        if len(self.state_history) < self.obs_stack_size:
+            padding = np.full_like(single_state_vector, STACKING_PADDING_VALUE, dtype=np.float32)
+            while len(self.state_history) < self.obs_stack_size:
+                self.state_history.appendleft(padding.copy())
+
+        stacked_vector = np.concatenate(list(self.state_history)).astype(np.float32)
+        return stacked_vector
     
     #change this name to _does_not_create_new_conflicts
     def _is_proactive_move(self, flight_id, target_aircraft_id):
@@ -1807,6 +2028,10 @@ class AircraftDisruptionEnv(gym.Env):
         # Rest of the reset method remains unchanged
         self.current_datetime = self.start_datetime
         self.actions_taken = set()
+        self.state_history.clear()
+        self.previous_probabilities = {aircraft_id: 0.0 for aircraft_id in self.aircraft_ids}
+        self.last_action_probability = None
+        self.last_action_aircraft_id = None
 
         self.something_happened = False
 
@@ -1967,21 +2192,23 @@ class AircraftDisruptionEnv(gym.Env):
         """Retrieves the current conflicts in the environment.
 
         This function checks for conflicts between flights and unavailability periods,
-        considering only unavailabilities with probability 
+        considering only unavailabilities with probability > 0.0.
         It excludes cancelled flights which are not considered conflicts.
 
         Returns:
             set: A set of conflicts currently present in the environment.
         """
         current_conflicts = set()
+        # Calculate current_time_minutes once before the loops for performance
+        current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
 
         for idx, aircraft_id in enumerate(self.aircraft_ids):
             if idx >= self.max_aircraft:
                 break
 
             breakdown_probability = self.unavailabilities_dict[aircraft_id]['Probability']
-            if breakdown_probability == 0.0:  # Only consider unavailability with probability 
-                continue  # Skip if probability is not 0.0
+            if breakdown_probability == 0.0:  # Only consider unavailability with probability > 0.0
+                continue  # Skip if probability is 0.0
 
             unavail_start = self.unavailabilities_dict[aircraft_id]['StartTime']
             unavail_end = self.unavailabilities_dict[aircraft_id]['EndTime']
@@ -1995,14 +2222,13 @@ class AircraftDisruptionEnv(gym.Env):
 
                     if not np.isnan(flight_dep) and not np.isnan(flight_arr):
                         # Check if the flight's departure is in the past (relative to current time)
-                        current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
                         if flight_dep < current_time_minutes:
                             continue  # Skip past flights
 
                         if flight_id in self.cancelled_flights:
                             continue  # Skip cancelled flights
 
-                        # Check for overlaps with unavailability periods with prob 
+                        # Check for overlaps with unavailability periods with prob > 0.0
                         if flight_dep < unavail_end and flight_arr > unavail_start:
                             conflict_identifier = (aircraft_id, flight_id, flight_dep, flight_arr)
                             current_conflicts.add(conflict_identifier)
@@ -2021,6 +2247,8 @@ class AircraftDisruptionEnv(gym.Env):
             set: A set of conflicts currently present in the environment.
         """
         current_conflicts_with_prob_1 = set()
+        # Calculate current_time_minutes once before the loops for performance
+        current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
 
         for idx, aircraft_id in enumerate(self.aircraft_ids):
             if idx >= self.max_aircraft:
@@ -2042,7 +2270,6 @@ class AircraftDisruptionEnv(gym.Env):
 
                     if not np.isnan(flight_dep) and not np.isnan(flight_arr):
                         # Check if the flight's departure is in the past (relative to current time)
-                        current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
                         if flight_dep < current_time_minutes:
                             continue  # Skip past flights
 
@@ -2062,6 +2289,9 @@ class AircraftDisruptionEnv(gym.Env):
         Returns:
             bool: True if there are overlaps, False otherwise.
         """
+        # Calculate current_time_minutes once before the loops for performance
+        current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
+        
         for idx, aircraft_id in enumerate(self.aircraft_ids):
             if idx >= self.max_aircraft:
                 break
@@ -2087,7 +2317,6 @@ class AircraftDisruptionEnv(gym.Env):
                         continue
 
                     # Skip past flights
-                    current_time_minutes = (self.current_datetime - self.earliest_datetime).total_seconds() / 60
                     if flight_arr < current_time_minutes:
                         continue
 

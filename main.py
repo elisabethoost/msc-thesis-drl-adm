@@ -500,25 +500,30 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.3e5)  #10000 timesteps for proper convergence (increased from 200k)
+    MAX_TOTAL_TIMESTEPS = int(3.5e5)  #5e5 = 500000 timesteps for proper convergence (increased from 200k)
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "Save_Trained_Models40"
-    TESTING_FOLDERS_PATH = "Data/TRAINING/3ac-702-train/"
+    save_folder = "Final_Model_7"
+    TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
-    # env_types = ['myopic', 'proactive', 'reactive']
-    env_types = ['proactive']  # Test only proactive environment
+    env_types = ['myopic', 'proactive', 'reactive']
+    # env_types = ['proactive']  # Test only proactive environment
+
+    print(f"Temporal features enabled: {config.ENABLE_TEMPORAL_DERIVED_FEATURES} | "
+          f"Derived features/aircraft: {config.DERIVED_FEATURES_PER_AIRCRAFT} | "
+          f"Observation stack size: {config.OBS_STACK_SIZE}")
 
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
     all_folders_temp = [
         "Data/TRAINING/3ac-130-green/"
+        # "Data/TRAINING/3ac-520-blue/"	
         # "Data/TRAINING/3ac-702-train/"
         #"Data/TRAINING/6ac-26-lilac/"
         # "Data/TRAINING/6ac-13-mauve"

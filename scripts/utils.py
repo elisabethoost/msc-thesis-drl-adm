@@ -573,12 +573,25 @@ def initialize_device():
     """Initialize and return the computation device."""
     if th.cuda.is_available():
         device = th.device('cuda')
+        gpu_name = th.cuda.get_device_name(0)
+        gpu_memory = th.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+        print("=" * 60)
+        print(f"[OK] NVIDIA GPU DETECTED: {gpu_name}")
+        # print(f"[OK] GPU Memory: {gpu_memory:.2f} GB")
+        # print(f"[OK] Training will use GPU: {device}")
+        # print(f"[OK] CUDA Version: {th.version.cuda}")
+        print("=" * 60)
     elif th.backends.mps.is_available():
         device = th.device('mps')
+        print(f"[WARNING] Using Apple Silicon (MPS) - GPU acceleration available")
+        print(f"Using device: {device}")
     else:
         device = th.device('cpu')
+        print("=" * 60)
+        print("[WARNING] No GPU detected, using CPU (training will be slower)")
+        print("Using device: cpu")
+        print("=" * 60)
 
-    print(f"Using device: {device}")
     return device
 
 

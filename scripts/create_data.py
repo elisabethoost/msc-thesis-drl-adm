@@ -9,6 +9,79 @@ from scripts.logger import *
 from src.config import *
 import numpy as np
 
+def parse_time_with_day_offset_for_conflict(time_str, reference_date):
+    """Parse time string to datetime, handling day offsets."""
+    if isinstance(time_str, datetime):
+        return time_str
+    if '+1' in time_str:
+        time_str = time_str.replace('+1', '').strip()
+        time_obj = datetime.strptime(time_str, '%H:%M')
+        return datetime.combine(reference_date, time_obj.time()) + timedelta(days=1)
+    else:
+        time_obj = datetime.strptime(time_str, '%H:%M')
+        parsed_time = datetime.combine(reference_date, time_obj.time())
+        if parsed_time < reference_date:
+            parsed_time += timedelta(days=1)
+        return parsed_time
+
+def check_initial_conflicts(flights_dict, disruptions, flight_rotation_data, start_datetime):
+    """
+    Check if there are any initial conflicts between flights and unavailabilities.
+    
+    A conflict exists if:
+    - An unavailability has probability > 0
+    - A flight on the same aircraft overlaps with the unavailability time window
+    
+    Returns:
+        bool: True if at least one conflict exists, False otherwise
+        list: List of conflict details (for debugging)
+    """
+    conflict_details = []
+    has_conflict = False
+    
+    # Process disruptions
+    for disruption_info in disruptions.get('disruptions', []):
+        aircraft_id = disruption_info['aircraft_id']
+        probability = disruption_info.get('probability', 1.0)
+        
+        # Only check unavailabilities with probability > 0
+        if probability <= 0:
+            continue
+        
+        # Get unavailability time window
+        start_date = disruption_info['start_date']
+        start_time = disruption_info['start_time']
+        end_date = disruption_info['end_date']
+        end_time = disruption_info['end_time']
+        
+        unavail_start = datetime.strptime(f"{start_date} {start_time}", '%d/%m/%y %H:%M')
+        unavail_end = datetime.strptime(f"{end_date} {end_time}", '%d/%m/%y %H:%M')
+        
+        # Check if any flight on this aircraft overlaps with the unavailability
+        for flight_id, rotation_info in flight_rotation_data.items():
+            if rotation_info.get('Aircraft') == aircraft_id:
+                if flight_id in flights_dict:
+                    flight_info = flights_dict[flight_id]
+                    
+                    # Parse flight times (arrival is relative to start_datetime, not departure)
+                    dep_time = parse_time_with_day_offset_for_conflict(flight_info['DepTime'], start_datetime)
+                    arr_time = parse_time_with_day_offset_for_conflict(flight_info['ArrTime'], start_datetime)
+                    
+                    # Check for overlap: flight overlaps if not (arr_time < unavail_start or dep_time > unavail_end)
+                    if not (arr_time < unavail_start or dep_time > unavail_end):
+                        has_conflict = True
+                        conflict_details.append({
+                            'aircraft_id': aircraft_id,
+                            'flight_id': flight_id,
+                            'probability': probability,
+                            'unavail_start': unavail_start,
+                            'unavail_end': unavail_end,
+                            'flight_dep': dep_time,
+                            'flight_arr': arr_time
+                        })
+    
+    return has_conflict, conflict_details
+
 
 # Function to generate the config file
 def generate_config_file(file_name, config_dict, recovery_start_date, recovery_start_time, recovery_end_date, recovery_end_time):
@@ -409,8 +482,17 @@ def create_data_scenario(
     std_dev_flights_per_aircraft, airports, config_dict, recovery_start_date,
     recovery_start_time, recovery_end_date, recovery_end_time, clear_one_random_aircraft, 
     clear_random_flights, switch_one_random_flight_to_the_cleared_aircraft, probability_range, probability_distribution, first_flight_dep_time_range, 
-    flight_length_range, time_between_flights_range, percentage_no_turn_time):
-    """Creates a data scenario and returns the outputs."""
+    flight_length_range, time_between_flights_range, percentage_no_turn_time, require_initial_conflicts=False):
+    """
+    Creates a data scenario and returns the outputs.
+    
+    Args:
+        require_initial_conflicts: If True, only return scenarios with at least one initial conflict.
+                                  If False (default), return all scenarios regardless of conflicts.
+    
+    Returns:
+        tuple: (data_folder, inputs, outputs) if scenario is valid, None if require_initial_conflicts=True and no conflicts exist
+    """
 
     data_folder = os.path.join(data_root_folder, scenario_name)
     if os.path.exists(data_folder):
@@ -483,7 +565,18 @@ def create_data_scenario(
             if f_id in flights_dict:
                 del flights_dict[f_id]
 
-
+    # Check for initial conflicts if required
+    if require_initial_conflicts:
+        has_conflicts, conflict_details = check_initial_conflicts(
+            flights_dict, disruptions, flight_rotation_data, start_datetime
+        )
+        
+        if not has_conflicts:
+            # Remove the scenario folder since it doesn't meet requirements
+            if os.path.exists(data_folder):
+                shutil.rmtree(data_folder)
+            print(f"Scenario {scenario_name} skipped: no initial conflicts found.")
+            return None
 
     # Collect inputs and outputs for logging
     inputs = {

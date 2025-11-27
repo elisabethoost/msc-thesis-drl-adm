@@ -6,13 +6,13 @@ Usage:
     python analyze_random_episode.py
     
     # Analyze a random episode/scenario from a specific file
-    python analyze_random_episode.py Save_Trained_Models39/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl
+    python analyze_random_episode.py Final_Model_4/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl
     
     # Analyze a specific episode (random scenario)
     python analyze_random_episode.py Save_Trained_Models38/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl 46
     
     # Analyze a specific episode and scenario
-    python analyze_random_episode.py Save_Trained_Models39/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl 19 "Data/TRAINING/3ac-130-green/mixed_Scenario_00124"
+    python analyze_random_episode.py Save_Trained_Models50/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl 11 "Data/TRAINING/3ac-130-green/mixed_Scenario_00115"
 
     If no path is provided, it will look for the most recent detailed_episodes file.
 """
@@ -158,7 +158,9 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
         "penalty_4_proactive_enabled": "Penalty #4: Proactive",
         "penalty_5_time_enabled": "Penalty #5: Time",
         "penalty_6_final_reward_enabled": "Penalty #6: Final Reward",
-        "penalty_7_auto_cancellation_enabled": "Penalty #7: Auto Cancellation"
+        "penalty_7_auto_cancellation_enabled": "Penalty #7: Auto Cancellation",
+        "penalty_8_probability_resolution_bonus_enabled": "Reward #8: Probability Resolution Bonus",
+        "penalty_9_low_confidence_action_enabled": "Penalty #9: Low-Confidence Action"
     }
     
     for penalty_key, penalty_label in penalty_names.items():
@@ -172,14 +174,23 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
     print("=" * 100)
     
     total_reward = 0
+    # Map penalty dict keys to display names (handle both old and new formats)
     penalty_totals = {
-        "delay": 0,
-        "cancellation": 0,
-        "inaction": 0,
-        "automatic_cancellation": 0,
-        "proactive": 0,
-        "time": 0,
-        "final_conflict_resolution_reward": 0
+        "delay": 0,  # Old format
+        "delay_penalty_total": 0,  # New format
+        "cancellation": 0,  # Old format
+        "cancel_penalty": 0,  # New format
+        "inaction": 0,  # Old format
+        "inaction_penalty": 0,  # New format
+        "automatic_cancellation": 0,  # Old format
+        "automatic_cancellation_penalty": 0,  # New format
+        "proactive": 0,  # Old format
+        "proactive_penalty": 0,  # New format
+        "time": 0,  # Old format
+        "time_penalty": 0,  # New format
+        "final_conflict_resolution_reward": 0,
+        "probability_resolution_bonus": 0,
+        "low_confidence_action_penalty": 0
     }
     
     for i, step_info in enumerate(steps):
@@ -193,6 +204,41 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
         # Get decoded action (flight, aircraft) if available, otherwise decode from action index
         flight_action = step_info.get('flight_action', None)
         aircraft_action = step_info.get('aircraft_action', None)
+        
+        # Check swapped_flights to verify the actual action taken (more reliable than decoded action)
+        # swapped_flights stores (flight_id, aircraft_id) tuples and accumulates across steps
+        swapped_flights = step_info.get('swapped_flights', [])
+        action_discrepancy = False
+        corrected_note = ""
+        
+        # Get new swaps for this step by comparing with previous step
+        prev_swapped = steps[i-1].get('swapped_flights', []) if i > 0 else []
+        new_swaps = [swap for swap in swapped_flights if swap not in prev_swapped]
+        
+        # Only check swapped_flights for reassignment actions (not cancellations, which have aircraft_action == 0)
+        # If there's a new swap and it doesn't match the logged action, use swapped_flights as source of truth
+        if (new_swaps and flight_action is not None and aircraft_action is not None 
+            and aircraft_action != 0):  # Only for reassignments, not cancellations
+            actual_flight, actual_aircraft_id = new_swaps[0]
+            # swapped_flights stores aircraft_id (string like "AC1"), but action uses aircraft index (1-based int)
+            # If the logged flight doesn't match the swapped flight, there's a discrepancy
+            if flight_action != actual_flight:
+                action_discrepancy = True
+                logged_flight = step_info.get('flight_action', '?')
+                logged_aircraft = step_info.get('aircraft_action', '?')
+                # Use the actual flight from swapped_flights
+                flight_action = actual_flight
+                # Try to convert aircraft_id to aircraft index if possible
+                # For now, we'll try to extract the number from aircraft_id (e.g., "AC1" -> 1)
+                if isinstance(actual_aircraft_id, str) and actual_aircraft_id.startswith("AC"):
+                    try:
+                        aircraft_action = int(actual_aircraft_id[2:])
+                    except ValueError:
+                        pass  # Keep original aircraft_action if conversion fails
+                elif isinstance(actual_aircraft_id, (int, float)):
+                    aircraft_action = int(actual_aircraft_id)
+                corrected_note = f" [CORRECTED: logged was ({logged_flight}, {logged_aircraft}), actual from swapped_flights: ({actual_flight}, {actual_aircraft_id})]"
+        
         if flight_action is None or aircraft_action is None:
             # Fallback: try to decode from action index (would need env, but for display we can show action)
             action_display = f"{action}"
@@ -206,6 +252,10 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
                 action_display = f"({flight_action}, 0) [Cancel flight {flight_action}]"
             else:
                 action_display = f"({flight_action}, {aircraft_action}) [Flight {flight_action} -> Aircraft {aircraft_action}]"
+            
+            # Add correction note if there was a discrepancy
+            if action_discrepancy:
+                action_display += corrected_note
         
         action_reason = step_info.get('action_reason', '?')
         something_happened = step_info.get('something_happened', False)
@@ -224,34 +274,122 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
             status_parts.append("Scenario ENDED (final reward calculated)")
         status_str = " | ".join(status_parts) if status_parts else "No state change"
         
+        # Get time information
+        time_minutes = step_info.get('current_time_minutes', None)
+        time_minutes_from_start = step_info.get('current_time_minutes_from_start', None)
+        time_display = str(current_datetime)
+        if time_minutes_from_start is not None:
+            time_display += f" ({time_minutes_from_start:.1f} min from start)"
+        elif time_minutes is not None:
+            time_display += f" ({time_minutes:.1f} min)"
+        
         print(f"\nStep {step_num}:")
         print(f"  Epsilon: {epsilon:.4f} | Action: {action_display} ({action_reason}) | {status_str}")
-        print(f"  Time: {current_datetime} | Step reward: {reward:.2f} | Total: {total_reward_so_far:.2f}")
+        print(f"  Time: {time_display} | Step reward: {reward:.2f} | Total: {total_reward_so_far:.2f}")
 
         # Explicitly report invalid action penalties
         if invalid_action:
             reason_str = f" Reason: {invalid_action_reason}" if invalid_action_reason else ""
             print(f"  INVALID ACTION detected -> Fixed penalty applied: -1000.{reason_str}")
         
+        # Get delay information (even if penalty is 0)
+        delay_minutes_info = step_info.get('delay_penalty_minutes', None)
+        environment_delayed = step_info.get('environment_delayed_flights', {})
+        total_delay_minutes = 0
+        if delay_minutes_info is not None:
+            total_delay_minutes = delay_minutes_info
+        elif environment_delayed:
+            total_delay_minutes = sum(environment_delayed.values())
+        
         # Print penalties
         has_penalties = False
+        
+        # Map old format to new format for consistent handling
+        penalty_key_mapping = {
+            "delay": "delay_penalty_total",
+            "cancellation": "cancel_penalty",
+            "inaction": "inaction_penalty",
+            "automatic_cancellation": "automatic_cancellation_penalty",
+            "proactive": "proactive_penalty",
+            "time": "time_penalty"
+        }
+        
+        # Map penalty names to readable labels
+        penalty_labels = {
+            "delay_penalty_total": "Delay penalty",
+            "cancel_penalty": "Cancellation penalty",
+            "inaction_penalty": "Inaction penalty",
+            "automatic_cancellation_penalty": "Automatic cancellation penalty",
+            "proactive_penalty": "Proactive penalty",
+            "time_penalty": "Time penalty",
+            "final_conflict_resolution_reward": "Final conflict resolution reward",
+            "probability_resolution_bonus": "Probability resolution bonus (Reward #8)",
+            "low_confidence_action_penalty": "Low-confidence action penalty (Penalty #9)"
+        }
+        
+        # Deduplicate penalties: prefer new format keys, fall back to old format
+        processed_penalties = {}
         for penalty_name, penalty_value in penalties.items():
-            if penalty_value != 0:
+            # Normalize to new format
+            normalized_name = penalty_key_mapping.get(penalty_name, penalty_name)
+            # Only keep the new format key (or unique keys like rewards)
+            if normalized_name not in processed_penalties:
+                processed_penalties[normalized_name] = penalty_value
+            elif penalty_name == normalized_name:  # If it's already the new format, prefer it
+                processed_penalties[normalized_name] = penalty_value
+        
+        for penalty_name, penalty_value in processed_penalties.items():
+            # Show penalty even if very small (to see actual values)
+            if abs(penalty_value) > 1e-6:  # Show if greater than 0.000001
                 has_penalties = True
+                # Track in totals
+                if penalty_name not in penalty_totals:
+                    penalty_totals[penalty_name] = 0
                 penalty_totals[penalty_name] += abs(penalty_value)
                 sign = "-" if penalty_value < 0 else "+"
+                display_name = penalty_labels.get(penalty_name, penalty_name)
                 
                 # Special handling for delay penalty to show minutes
-                if penalty_name == "delay":
-                    DELAY_MINUTE_PENALTY = 0.02
-                    delay_minutes = abs(penalty_value) / DELAY_MINUTE_PENALTY
-                    delay_hours = delay_minutes / 60
-                    print(f"    {sign} {penalty_name}: {abs(penalty_value):.2f} ({delay_minutes:.1f} min = {delay_hours:.2f} hours)")
+                if penalty_name == "delay_penalty_total":
+                    try:
+                        from src.config_rf import DELAY_MINUTE_PENALTY
+                        if total_delay_minutes > 0:
+                            delay_hours = total_delay_minutes / 60
+                            print(f"    {sign} {display_name}: {abs(penalty_value):.4f} (Delay: {total_delay_minutes:.1f} min = {delay_hours:.2f} hours)")
+                        else:
+                            print(f"    {sign} {display_name}: {abs(penalty_value):.4f}")
+                    except (ImportError, ZeroDivisionError):
+                        print(f"    {sign} {display_name}: {abs(penalty_value):.4f}")
                 else:
-                    print(f"    {sign} {penalty_name}: {abs(penalty_value):.2f}")
+                    # Show more precision for small values
+                    if abs(penalty_value) < 0.01:
+                        print(f"    {sign} {display_name}: {abs(penalty_value):.6f}")
+                    else:
+                        print(f"    {sign} {display_name}: {abs(penalty_value):.4f}")
         
-        if not has_penalties:
-            print(f"    (No penalties)")
+        # Always show delay minutes if there are any delays, even if penalty is 0
+        if total_delay_minutes > 0 and not has_penalties:
+            delay_hours = total_delay_minutes / 60
+            print(f"    Delay: {total_delay_minutes:.1f} min = {delay_hours:.2f} hours (no penalty, below threshold)")
+        elif total_delay_minutes > 0:
+            # Check if delay penalty was shown
+            delay_shown = any(p in ["delay", "delay_penalty_total"] for p in penalties.keys() if penalties[p] != 0)
+            if not delay_shown:
+                delay_hours = total_delay_minutes / 60
+                print(f"    Delay: {total_delay_minutes:.1f} min = {delay_hours:.2f} hours (no penalty, below threshold)")
+        
+        # Check for rewards #8 and #9 even if they're 0 or missing
+        prob_bonus = penalties.get("probability_resolution_bonus", 0)
+        low_conf_penalty = penalties.get("low_confidence_action_penalty", 0)
+        
+        if prob_bonus == 0 and "probability_resolution_bonus" not in penalties:
+            # Check if it should have been there but wasn't logged
+            resolved_conflicts = step_info.get('resolved_conflicts_count', 0)
+            if resolved_conflicts > 0:
+                print(f"    Note: {resolved_conflicts} conflicts resolved but Reward #8 not in penalties dict")
+        
+        if not has_penalties and total_delay_minutes == 0:
+            print(f"    (No penalties/rewards)")
         
         # Print state info
         cancelled = step_info.get('cancelled_flights', set())
@@ -272,10 +410,50 @@ def analyze_random_episode(pickle_path=None, episode_num=None, scenario_folder=N
     print(f"Total reward: {total_reward:.2f}")
     print(f"Average reward per step: {total_reward / len(steps):.2f}")
     
-    print(f"\nPenalty breakdown:")
+    print(f"\nPenalty/Reward breakdown:")
+    # Map penalty names to readable labels for summary (handle both old and new formats)
+    penalty_labels = {
+        "delay": "Delay penalty",
+        "delay_penalty_total": "Delay penalty",
+        "cancellation": "Cancellation penalty",
+        "cancel_penalty": "Cancellation penalty",
+        "inaction": "Inaction penalty",
+        "inaction_penalty": "Inaction penalty",
+        "automatic_cancellation": "Automatic cancellation penalty",
+        "automatic_cancellation_penalty": "Automatic cancellation penalty",
+        "proactive": "Proactive penalty",
+        "proactive_penalty": "Proactive penalty",
+        "time": "Time penalty",
+        "time_penalty": "Time penalty",
+        "final_conflict_resolution_reward": "Final conflict resolution reward",
+        "probability_resolution_bonus": "Probability resolution bonus (Reward #8)",
+        "low_confidence_action_penalty": "Low-confidence action penalty (Penalty #9)"
+    }
+    
+    # Combine old and new format totals
+    combined_totals = {}
+    penalty_key_mapping = {
+        "delay": "delay_penalty_total",
+        "cancellation": "cancel_penalty",
+        "inaction": "inaction_penalty",
+        "automatic_cancellation": "automatic_cancellation_penalty",
+        "proactive": "proactive_penalty",
+        "time": "time_penalty"
+    }
+    
     for penalty_name, total in penalty_totals.items():
         if total != 0:
-            print(f"  {penalty_name}: {total:.2f}")
+            # Normalize to new format
+            normalized = penalty_key_mapping.get(penalty_name, penalty_name)
+            if normalized in combined_totals:
+                combined_totals[normalized] += total
+            else:
+                combined_totals[normalized] = total
+    
+    for penalty_name, total in sorted(combined_totals.items()):
+        display_name = penalty_labels.get(penalty_name, penalty_name)
+        sign = "+" if penalty_name in ["final_conflict_resolution_reward", "probability_resolution_bonus"] else "-"
+        print(f"  {display_name}: {sign}{total:.2f}")
     
     print(f"\nTo analyze a specific episode/scenario, run:")
     print(f"  python analyze_training_results.py {pickle_path} {episode_num} \"{scenario_folder}\"")

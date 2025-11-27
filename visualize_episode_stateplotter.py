@@ -557,7 +557,7 @@ def load_and_visualize_episode(save_folder, env_type, seed, episode_number, scen
         os.makedirs(output_dir, exist_ok=True)
         
         # Create visualization
-        save_path = f"{output_dir}/stateplotter_visualization_{env_type}_seed_{seed}.png"
+        save_path = f"{output_dir}/visualization_{env_type}_seed_{seed}.png"
         figures = visualizer.create_episode_visualization(save_path)
         
         # Print episode summary
@@ -592,11 +592,11 @@ if __name__ == "__main__":
         scenario_folder = sys.argv[5] if len(sys.argv) > 5 else None
     else:
         # Default values (update these for your current run)
-        save_folder = "Save_Trained_Models40/3ac-130-green"
+        save_folder = "Final_Model_4/3ac-130-green"
         env_type = "proactive"
         seed = 232323
-        episode_number = 5  # 0-indexed
-        scenario_folder = "Data/TRAINING/3ac-130-green/stochastic_Scenario_00088"  # Can be None to use first available
+        episode_number = 8  # 0-indexed
+        scenario_folder = "Data/TRAINING/3ac-130-green/stochastic_Scenario_00052"  # Can be None to use first available
     
     print(f"Visualization Configuration:")
     print(f"   Save Folder: {save_folder}")
