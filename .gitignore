@@ -1,68 +1,86 @@
-venv/
-.venv/
-.venv2/
-*.pyc
+# Python
 __pycache__/
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# add Testing folders
-data/Testing*/
-data/RESULTS*/
-data/REVERSED*/
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
 
-# Ignore all Data/TRAINING subfolders by default
-Data/TRAINING/*
-# But specifically allow these folders and their contents
-!Data/TRAINING/3ac-130-green/
-!Data/TRAINING/3ac-130-green/**
-!Data/TRAINING/3ac-182-green16/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Data/TRAINING - Ignore all except specific folders
+# Ignore everything in Data/TRAINING recursively
+Data/TRAINING/**
+# Un-ignore the parent directory (needed for sub-patterns to work)
+!Data/TRAINING/
+# Un-ignore the two allowed folders and all their contents
 !Data/TRAINING/3ac-182-green16/**
+!Data/TRAINING/3ac-130-green/**
 
-# add the action sequences folder
-results/*/action_sequences/
-data/temp/
+# Data Template - Ignore entire folder
+Data Template/
 
-# add the reward plots per scenario
-results/*/plots/reward-plots-per-scenario/
+# Results - Ignore all file contents but keep directory structure
+# This pattern ignores all files in results and subdirectories
+results/**/*
+# Un-ignore .gitkeep files to allow tracking directory structure
+!results/**/.gitkeep
+# Un-ignore Model 3's m3_2 training results (track all contents)
+# Un-ignore parent directories (as directories, not their file contents)
+!results/model3_ssf_large/
+!results/model3_ssf_large/training/
+!results/model3_ssf_large/training/m3_2/
+# Now un-ignore all files in m3_2
+!results/model3_ssf_large/training/m3_2/**
 
-# Ignore Jupyter notebook checkpoints and output
-# .ipynb_checkpoints/
+# Logs
+logs/**/*.log
 
-/results/a2c/*
-/results/ppo/*
-/results/dqn/*
+# OS
+.DS_Store
+Thumbs.db
 
-!/results/a2c/_*
-!/results/ppo/_*
-!/results/dqn/_*
+# Temporary files
+*.tmp
+*.bak
+*.swp
 
-
-
-
-logs/training/*
-logs/*
-
-# Ignore large checkpoint files
-Save_Trained_Models/training_monitor/checkpoints/*.pt
-Save_Trained_Models/*/checkpoints/*.pt
+# Model checkpoints (if large)
 *.pt
+*.pth
+*.h5
+*.ckpt
 
-# Ignore the entire Save_Trained_Models directory
-Save_Trained_Models/
-Save_Trained_Models*/
+# Miscellaneous
+md files/
+results old/
 
-# Ignore all ORIG_Trained_Models directories
-ORIG_Trained_Models*/
-Final_Model_*/
-Final_SSFModel_1/
-analyze_random_episode_negative_rewards.py
-
-# Ignore specific analysis files
-ANALYSIS_GUIDE.md
-check_termination_simple.py
-analyze_penalties.py
-train_dqn_modular_orig.py
-main_orig.py
-original_environment.py
-ARTICLE_STRUCTURE.md
-ARTICLE_WRITING.md	
