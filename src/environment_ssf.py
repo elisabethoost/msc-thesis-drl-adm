@@ -116,6 +116,8 @@ class AircraftDisruptionEnv(gym.Env):
         self.penalized_delays = {}           # Set of penalized delays
         self.penalized_cancelled_flights = set()  # To keep track of penalized cancelled flights
         self.cancelled_flights = set()
+        self.automatically_cancelled_flights = set()
+        self.penalized_automatically_cancelled_flights = set()
         
         self.penalized_conflicts = set()        # Set of penalized conflicts
         self.resolved_conflicts = set()         # Set of resolved conflicts
@@ -165,9 +167,12 @@ class AircraftDisruptionEnv(gym.Env):
             "delay_penalty_total": 0,
             "cancel_penalty": 0,
             "inaction_penalty": 0,
-            "proactive_bonus": 0,
+            "proactive_penalty": 0,
             "time_penalty": 0,
             "final_conflict_resolution_reward": 0,
+            "automatic_cancellation_penalty": 0,
+            "probability_resolution_bonus": 0,
+            "low_confidence_action_penalty": 0,
         }
 
         # Initialize tail swap tracking
@@ -477,6 +482,99 @@ class AircraftDisruptionEnv(gym.Env):
                 dtype=np.uint8
             )
         })
+
+    def get_all_flights_for_aircraft(self, ac_idx, flight_features):
+        """Gets all flights for a specific aircraft from flight_features.
+        
+        Args:
+            ac_idx (int): Aircraft index
+            flight_features: Flight features matrix (MAX_AIRCRAFT, MAX_FLIGHTS_PER_AIRCRAFT * 4)
+            
+        Returns:
+            list: List of tuples (flight_id, dep_interval, arr_interval, status)
+        """
+        flights = []
+        
+        if ac_idx >= flight_features.shape[0]:
+            return flights
+        
+        # Get the row for this aircraft
+        aircraft_row = flight_features[ac_idx, :]
+        
+        # Each flight takes 4 columns: [fl_id, dep_interval, arr_interval, status]
+        num_flights = self.flights_per_aircraft.get(ac_idx, 0)
+        
+        for flight_idx in range(num_flights):
+            col_start = flight_idx * 4
+            
+            # Check if we've exceeded the matrix bounds
+            if col_start + 3 >= flight_features.shape[1]:
+                break
+            
+            # Extract flight data
+            flight_id = aircraft_row[col_start]
+            dep_interval = aircraft_row[col_start + 1]
+            arr_interval = aircraft_row[col_start + 2]
+            status = aircraft_row[col_start + 3]
+            
+            # Skip NaN values (empty flight slots)
+            if np.isnan(flight_id):
+                break
+            
+            flights.append((int(flight_id), int(dep_interval), int(arr_interval), float(status)))
+        
+        return flights
+    
+    def get_flight_data(self, flight_id, flight_features):
+        """Gets flight data from flight_features for a specific flight.
+        
+        Args:
+            flight_id (int): Flight ID
+            flight_features: Flight features matrix
+            
+        Returns:
+            tuple: (ac_idx, flight_idx, flight_id, dep_interval, arr_interval, status) or None
+        """
+        # Use flight_id_to_position mapping if available
+        if hasattr(self, 'flight_id_to_position') and flight_id in self.flight_id_to_position:
+            ac_idx, flight_idx = self.flight_id_to_position[flight_id]
+            
+            if ac_idx >= flight_features.shape[0]:
+                return None
+            
+            col_start = flight_idx * 4
+            if col_start + 3 >= flight_features.shape[1]:
+                return None
+            
+            dep_interval = flight_features[ac_idx, col_start + 1]
+            arr_interval = flight_features[ac_idx, col_start + 2]
+            status = flight_features[ac_idx, col_start + 3]
+            
+            if np.isnan(dep_interval) or np.isnan(arr_interval):
+                return None
+            
+            return (ac_idx, flight_idx, int(flight_id), int(dep_interval), int(arr_interval), float(status))
+        
+        # Fallback: search through all aircraft
+        for ac_idx in range(flight_features.shape[0]):
+            num_flights = self.flights_per_aircraft.get(ac_idx, 0)
+            for flight_idx in range(num_flights):
+                col_start = flight_idx * 4
+                if col_start + 3 >= flight_features.shape[1]:
+                    break
+                
+                if not np.isnan(flight_features[ac_idx, col_start]):
+                    if int(flight_features[ac_idx, col_start]) == flight_id:
+                        dep_interval = flight_features[ac_idx, col_start + 1]
+                        arr_interval = flight_features[ac_idx, col_start + 2]
+                        status = flight_features[ac_idx, col_start + 3]
+                        
+                        if np.isnan(dep_interval) or np.isnan(arr_interval):
+                            return None
+                        
+                        return (ac_idx, flight_idx, int(flight_id), int(dep_interval), int(arr_interval), float(status))
+        
+        return None
 
     def get_initial_conflicts(self):
         """Retrieves the initial conflicts in the environment.
@@ -1318,6 +1416,9 @@ class AircraftDisruptionEnv(gym.Env):
 
                 if DEBUG_MODE:
                     print(f"Aircraft {aircraft_id}: Probability updated from {prob:.2f} to {new_prob:.2f}")
+                
+                # Invalidate cache to ensure ac_mtx is updated with new probabilities
+                self.something_happened = True
 
                 if self.current_datetime + self.timestep >= breakdown_start_time:
                     if DEBUG_MODE_BREAKDOWN:
@@ -1335,6 +1436,9 @@ class AircraftDisruptionEnv(gym.Env):
                         if aircraft_id in self.alt_aircraft_dict:
                             for breakdown_info in self.alt_aircraft_dict[aircraft_id]:
                                 breakdown_info['Probability'] = 1.00
+                        
+                        # Invalidate cache to ensure ac_mtx is updated with new probabilities
+                        self.something_happened = True
 
                     else:
                         if DEBUG_MODE_BREAKDOWN:
@@ -1361,6 +1465,9 @@ class AircraftDisruptionEnv(gym.Env):
                         if aircraft_id in self.alt_aircraft_dict:
                             for breakdown_info in self.alt_aircraft_dict[aircraft_id]:
                                 breakdown_info['Probability'] = 0.00
+                
+                # Invalidate cache to ensure ac_mtx is updated with new probabilities
+                self.something_happened = True
 
     def handle_no_conflicts(self, flight_action, aircraft_action):
         """Handles the case when there are no conflicts in the current state using matrix-based approach.
@@ -1393,7 +1500,8 @@ class AircraftDisruptionEnv(gym.Env):
                 return processed_state, reward, terminated, truncated, {}
 
         self.current_datetime = next_datetime
-        # State will be updated when _get_initial_state() is called next
+        # Invalidate cache to ensure state reflects new datetime (probabilities may have changed)
+        self.something_happened = True
         
         # Get current state matrices for observation processing
         ac_mtx, flight_features = self._get_initial_state()
@@ -1677,14 +1785,18 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Store current unavailability probabilities for tracking evolution
         unavailabilities_probabilities = {}
+        interval_minutes = 15  # 15-minute intervals
         for aircraft_id in self.aircraft_ids:
             prob = self.unavailabilities_dict[aircraft_id]['Probability']
-            start = self.unavailabilities_dict[aircraft_id]['StartTime']
-            end = self.unavailabilities_dict[aircraft_id]['EndTime']
+            start_col = self.unavailabilities_dict[aircraft_id]['StartColumn']
+            end_col = self.unavailabilities_dict[aircraft_id]['EndColumn']
+            # Convert column indices to minutes
+            start_minutes = float(start_col * interval_minutes) if start_col >= 0 else None
+            end_minutes = float(end_col * interval_minutes) if end_col >= 0 else None
             unavailabilities_probabilities[aircraft_id] = {
                 'probability': float(prob) if not np.isnan(prob) else None,
-                'start_minutes': float(start) if not np.isnan(start) else None,
-                'end_minutes': float(end) if not np.isnan(end) else None
+                'start_minutes': start_minutes,
+                'end_minutes': end_minutes
             }
         
         # Store step information
@@ -1974,6 +2086,8 @@ class AircraftDisruptionEnv(gym.Env):
             # Proceed to next timestep
             next_datetime = self.current_datetime + self.timestep
             self.current_datetime = next_datetime
+            # Invalidate cache to ensure state reflects new datetime
+            self.something_happened = True
 
             post_action_conflicts = self.get_current_conflicts()
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
@@ -1999,6 +2113,8 @@ class AircraftDisruptionEnv(gym.Env):
             # Proceed to next timestep
             next_datetime = self.current_datetime + self.timestep
             self.current_datetime = next_datetime
+            # Invalidate cache to ensure state reflects new datetime
+            self.something_happened = True
 
             post_action_conflicts = self.get_current_conflicts()
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
@@ -2090,6 +2206,8 @@ class AircraftDisruptionEnv(gym.Env):
             # Proceed to next timestep
             next_datetime = self.current_datetime + self.timestep
             self.current_datetime = next_datetime
+            # Invalidate cache to ensure state reflects new datetime
+            self.something_happened = True
 
             post_action_conflicts = self.get_current_conflicts()
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
@@ -2554,6 +2672,8 @@ class AircraftDisruptionEnv(gym.Env):
         self.penalized_conflicts = set()
         self.resolved_conflicts = set()
         self.penalized_cancelled_flights = set()  # Reset penalized cancelled flights
+        self.automatically_cancelled_flights = set()  # Reset automatically cancelled flights
+        self.penalized_automatically_cancelled_flights = set()  # Reset penalized automatically cancelled flights
 
         self.cancelled_flights = set()
 

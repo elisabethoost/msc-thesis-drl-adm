@@ -1,0 +1,1890 @@
+{
+    "scenario_folder_id": "scenario_77",
+    "created_at": "2025-12-02T15:00:24.911395Z",
+    "data_folder": "../data/TRAINING/3ac-13-green16/",
+    "inputs": {
+        "combinations": [
+            [
+                "deterministic",
+                1,
+                "certain"
+            ],
+            [
+                "deterministic",
+                1,
+                "certain"
+            ],
+            [
+                "deterministic",
+                2,
+                "certain"
+            ],
+            [
+                "deterministic",
+                2,
+                "certain"
+            ],
+            [
+                "stochastic",
+                1,
+                "low"
+            ],
+            [
+                "stochastic",
+                1,
+                "medium"
+            ],
+            [
+                "stochastic",
+                1,
+                "high"
+            ],
+            [
+                "stochastic",
+                2,
+                "low"
+            ],
+            [
+                "stochastic",
+                2,
+                "medium"
+            ],
+            [
+                "stochastic",
+                2,
+                "high"
+            ],
+            [
+                "mixed",
+                2,
+                "low"
+            ],
+            [
+                "mixed",
+                2,
+                "medium"
+            ],
+            [
+                "mixed",
+                2,
+                "high"
+            ]
+        ],
+        "per_combination_scenarios": 1,
+        "aircraft": 3
+    },
+    "outputs": {
+        "deterministic_Scenario_00001": {
+            "recovery_start_date": "25/09/24",
+            "recovery_start_time": "5:00",
+            "recovery_end_date": "25/09/24",
+            "recovery_end_time": "23:00",
+            "total_aircraft": 3,
+            "total_flights": 11,
+            "disrupted_aircraft": 1,
+            "disruption_probabilities": {
+                "range": [
+                    1.0,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 6,
+                "B737#3": 5
+            },
+            "flights": {
+                "8": {
+                    "Orig": "CDG",
+                    "Dest": "DUB",
+                    "DepTime": "08:30",
+                    "ArrTime": "12:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "MUC",
+                    "Dest": "ORY",
+                    "DepTime": "12:38",
+                    "ArrTime": "15:46",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "BCN",
+                    "Dest": "ZRH",
+                    "DepTime": "15:59",
+                    "ArrTime": "19:19",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "IST",
+                    "Dest": "MAD",
+                    "DepTime": "19:19",
+                    "ArrTime": "21:55",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "12": {
+                    "Orig": "AMS",
+                    "Dest": "DUB",
+                    "DepTime": "21:55",
+                    "ArrTime": "00:19+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "13": {
+                    "Orig": "LHR",
+                    "Dest": "BRU",
+                    "DepTime": "00:19+1",
+                    "ArrTime": "03:52+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "14": {
+                    "Orig": "IST",
+                    "Dest": "ZRH",
+                    "DepTime": "07:30",
+                    "ArrTime": "11:39",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "15": {
+                    "Orig": "MAD",
+                    "Dest": "CPH",
+                    "DepTime": "12:52",
+                    "ArrTime": "17:13",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "16": {
+                    "Orig": "MUC",
+                    "Dest": "IST",
+                    "DepTime": "17:13",
+                    "ArrTime": "19:54",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "17": {
+                    "Orig": "BRU",
+                    "Dest": "AMS",
+                    "DepTime": "20:16",
+                    "ArrTime": "22:46",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "18": {
+                    "Orig": "MAD",
+                    "Dest": "MUC",
+                    "DepTime": "00:12+1",
+                    "ArrTime": "02:38+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 1,
+                "uncertain_count": 0,
+                "probability_range": [
+                    1.0,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "25/09/24",
+                        "start_time": "11:17",
+                        "end_date": "25/09/24",
+                        "end_time": "14:03",
+                        "probability": 1.0,
+                        "delta_start_minutes": 377,
+                        "unavailability_period_minutes": 166,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "deterministic_Scenario_00002": {
+            "recovery_start_date": "13/09/24",
+            "recovery_start_time": "6:00",
+            "recovery_end_date": "13/09/24",
+            "recovery_end_time": "21:00",
+            "total_aircraft": 3,
+            "total_flights": 10,
+            "disrupted_aircraft": 1,
+            "disruption_probabilities": {
+                "range": [
+                    1.0,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 6,
+                "B737#2": 0,
+                "B737#3": 4
+            },
+            "flights": {
+                "1": {
+                    "Orig": "IST",
+                    "Dest": "ORY",
+                    "DepTime": "06:15",
+                    "ArrTime": "08:39",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "LHR",
+                    "Dest": "VIE",
+                    "DepTime": "08:39",
+                    "ArrTime": "10:47",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "DUB",
+                    "Dest": "CPH",
+                    "DepTime": "10:47",
+                    "ArrTime": "14:11",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "MUC",
+                    "Dest": "IST",
+                    "DepTime": "14:11",
+                    "ArrTime": "16:59",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "5": {
+                    "Orig": "ZRH",
+                    "Dest": "AMS",
+                    "DepTime": "16:59",
+                    "ArrTime": "19:08",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "6": {
+                    "Orig": "BCN",
+                    "Dest": "VIE",
+                    "DepTime": "19:08",
+                    "ArrTime": "23:40",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "11": {
+                    "Orig": "MAD",
+                    "Dest": "MUC",
+                    "DepTime": "08:45",
+                    "ArrTime": "13:12",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "MUC",
+                    "Dest": "IST",
+                    "DepTime": "13:12",
+                    "ArrTime": "18:01",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "CPH",
+                    "Dest": "AMS",
+                    "DepTime": "18:01",
+                    "ArrTime": "21:06",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "FRA",
+                    "Dest": "MAD",
+                    "DepTime": "21:06",
+                    "ArrTime": "23:56",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 1,
+                "uncertain_count": 0,
+                "probability_range": [
+                    1.0,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "13/09/24",
+                        "start_time": "10:48",
+                        "end_date": "13/09/24",
+                        "end_time": "14:18",
+                        "probability": 1.0,
+                        "delta_start_minutes": 288,
+                        "unavailability_period_minutes": 210,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "deterministic_Scenario_00003": {
+            "recovery_start_date": "05/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "05/09/24",
+            "recovery_end_time": "22:30",
+            "total_aircraft": 3,
+            "total_flights": 12,
+            "disrupted_aircraft": 2,
+            "disruption_probabilities": {
+                "range": [
+                    1.0,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 6,
+                "B737#3": 6
+            },
+            "flights": {
+                "5": {
+                    "Orig": "TXL",
+                    "Dest": "FRA",
+                    "DepTime": "07:45",
+                    "ArrTime": "11:46",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "6": {
+                    "Orig": "LHR",
+                    "Dest": "ZRH",
+                    "DepTime": "11:46",
+                    "ArrTime": "14:02",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "VIE",
+                    "Dest": "TXL",
+                    "DepTime": "14:02",
+                    "ArrTime": "16:16",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "DUB",
+                    "Dest": "MAD",
+                    "DepTime": "16:16",
+                    "ArrTime": "18:39",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "ZRH",
+                    "Dest": "BCN",
+                    "DepTime": "18:39",
+                    "ArrTime": "21:04",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "ZRH",
+                    "Dest": "AMS",
+                    "DepTime": "21:04",
+                    "ArrTime": "01:47+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "VIE",
+                    "Dest": "CPH",
+                    "DepTime": "08:00",
+                    "ArrTime": "11:08",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "BCN",
+                    "Dest": "ZRH",
+                    "DepTime": "11:08",
+                    "ArrTime": "16:03",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "IST",
+                    "Dest": "FRA",
+                    "DepTime": "16:03",
+                    "ArrTime": "18:37",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "CDG",
+                    "Dest": "AMS",
+                    "DepTime": "18:37",
+                    "ArrTime": "21:20",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "15": {
+                    "Orig": "MUC",
+                    "Dest": "ORY",
+                    "DepTime": "21:20",
+                    "ArrTime": "23:26",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "16": {
+                    "Orig": "BCN",
+                    "Dest": "IST",
+                    "DepTime": "23:26",
+                    "ArrTime": "02:44+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 2,
+                "uncertain_count": 0,
+                "probability_range": [
+                    1.0,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "05/09/24",
+                        "start_time": "09:44",
+                        "end_date": "05/09/24",
+                        "end_time": "16:06",
+                        "probability": 1.0,
+                        "delta_start_minutes": 164,
+                        "unavailability_period_minutes": 382,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "05/09/24",
+                        "start_time": "14:14",
+                        "end_date": "05/09/24",
+                        "end_time": "20:37",
+                        "probability": 1.0,
+                        "delta_start_minutes": 434,
+                        "unavailability_period_minutes": 383,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "deterministic_Scenario_00004": {
+            "recovery_start_date": "23/09/24",
+            "recovery_start_time": "6:00",
+            "recovery_end_date": "23/09/24",
+            "recovery_end_time": "23:30",
+            "total_aircraft": 3,
+            "total_flights": 11,
+            "disrupted_aircraft": 2,
+            "disruption_probabilities": {
+                "range": [
+                    1.0,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 6,
+                "B737#3": 5
+            },
+            "flights": {
+                "8": {
+                    "Orig": "AMS",
+                    "Dest": "DUB",
+                    "DepTime": "06:15",
+                    "ArrTime": "09:49",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "MUC",
+                    "Dest": "LHR",
+                    "DepTime": "09:49",
+                    "ArrTime": "14:11",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "TXL",
+                    "Dest": "IST",
+                    "DepTime": "14:11",
+                    "ArrTime": "17:46",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "MUC",
+                    "Dest": "BRU",
+                    "DepTime": "17:46",
+                    "ArrTime": "20:14",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "12": {
+                    "Orig": "ZRH",
+                    "Dest": "MUC",
+                    "DepTime": "20:14",
+                    "ArrTime": "00:09+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "13": {
+                    "Orig": "BRU",
+                    "Dest": "VIE",
+                    "DepTime": "00:09+1",
+                    "ArrTime": "03:11+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "14": {
+                    "Orig": "CDG",
+                    "Dest": "VIE",
+                    "DepTime": "07:45",
+                    "ArrTime": "12:12",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "15": {
+                    "Orig": "MUC",
+                    "Dest": "LHR",
+                    "DepTime": "12:12",
+                    "ArrTime": "15:10",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "16": {
+                    "Orig": "DUB",
+                    "Dest": "MAD",
+                    "DepTime": "15:10",
+                    "ArrTime": "17:12",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "17": {
+                    "Orig": "TXL",
+                    "Dest": "FRA",
+                    "DepTime": "17:12",
+                    "ArrTime": "21:55",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "18": {
+                    "Orig": "LHR",
+                    "Dest": "BRU",
+                    "DepTime": "21:55",
+                    "ArrTime": "00:12+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 2,
+                "uncertain_count": 0,
+                "probability_range": [
+                    1.0,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "23/09/24",
+                        "start_time": "10:48",
+                        "end_date": "23/09/24",
+                        "end_time": "13:30",
+                        "probability": 1.0,
+                        "delta_start_minutes": 288,
+                        "unavailability_period_minutes": 162,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "23/09/24",
+                        "start_time": "12:50",
+                        "end_date": "23/09/24",
+                        "end_time": "16:50",
+                        "probability": 1.0,
+                        "delta_start_minutes": 410,
+                        "unavailability_period_minutes": 240,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00007": {
+            "recovery_start_date": "05/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "05/09/24",
+            "recovery_end_time": "21:00",
+            "total_aircraft": 3,
+            "total_flights": 10,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.0,
+                    0.5
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 5,
+                "B737#3": 5
+            },
+            "flights": {
+                "6": {
+                    "Orig": "DUB",
+                    "Dest": "VIE",
+                    "DepTime": "07:30",
+                    "ArrTime": "12:27",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "ZRH",
+                    "Dest": "CDG",
+                    "DepTime": "12:27",
+                    "ArrTime": "15:53",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "VIE",
+                    "Dest": "MUC",
+                    "DepTime": "15:53",
+                    "ArrTime": "19:13",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "CPH",
+                    "Dest": "LHR",
+                    "DepTime": "19:13",
+                    "ArrTime": "21:40",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "MAD",
+                    "Dest": "AMS",
+                    "DepTime": "21:40",
+                    "ArrTime": "01:08+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "ZRH",
+                    "Dest": "ORY",
+                    "DepTime": "07:15",
+                    "ArrTime": "10:33",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "ORY",
+                    "Dest": "CDG",
+                    "DepTime": "10:33",
+                    "ArrTime": "12:36",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "BRU",
+                    "Dest": "ZRH",
+                    "DepTime": "13:37",
+                    "ArrTime": "17:02",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "MAD",
+                    "Dest": "CPH",
+                    "DepTime": "17:02",
+                    "ArrTime": "22:01",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "15": {
+                    "Orig": "BRU",
+                    "Dest": "MUC",
+                    "DepTime": "22:01",
+                    "ArrTime": "01:20+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.0,
+                    0.5
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "05/09/24",
+                        "start_time": "14:17",
+                        "end_date": "05/09/24",
+                        "end_time": "20:54",
+                        "probability": 0.4365497644223354,
+                        "delta_start_minutes": 437,
+                        "unavailability_period_minutes": 397,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00008": {
+            "recovery_start_date": "19/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "19/09/24",
+            "recovery_end_time": "23:00",
+            "total_aircraft": 3,
+            "total_flights": 9,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.25,
+                    0.75
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 4,
+                "B737#2": 0,
+                "B737#3": 5
+            },
+            "flights": {
+                "1": {
+                    "Orig": "FRA",
+                    "Dest": "MUC",
+                    "DepTime": "08:30",
+                    "ArrTime": "11:32",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "ORY",
+                    "Dest": "VIE",
+                    "DepTime": "12:52",
+                    "ArrTime": "17:19",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "LHR",
+                    "Dest": "IST",
+                    "DepTime": "17:19",
+                    "ArrTime": "21:50",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "ZRH",
+                    "Dest": "VIE",
+                    "DepTime": "22:19",
+                    "ArrTime": "03:03+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "11": {
+                    "Orig": "CDG",
+                    "Dest": "AMS",
+                    "DepTime": "07:45",
+                    "ArrTime": "10:09",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "BCN",
+                    "Dest": "MAD",
+                    "DepTime": "10:09",
+                    "ArrTime": "14:56",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "MUC",
+                    "Dest": "ZRH",
+                    "DepTime": "16:11",
+                    "ArrTime": "19:27",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "ZRH",
+                    "Dest": "IST",
+                    "DepTime": "19:27",
+                    "ArrTime": "22:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "15": {
+                    "Orig": "VIE",
+                    "Dest": "MUC",
+                    "DepTime": "22:23",
+                    "ArrTime": "02:42+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.25,
+                    0.75
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "19/09/24",
+                        "start_time": "13:34",
+                        "end_date": "19/09/24",
+                        "end_time": "19:33",
+                        "probability": 0.5882520341634403,
+                        "delta_start_minutes": 394,
+                        "unavailability_period_minutes": 359,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00009": {
+            "recovery_start_date": "05/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "05/09/24",
+            "recovery_end_time": "20:00",
+            "total_aircraft": 3,
+            "total_flights": 8,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.5,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 4,
+                "B737#3": 4
+            },
+            "flights": {
+                "6": {
+                    "Orig": "IST",
+                    "Dest": "CPH",
+                    "DepTime": "08:15",
+                    "ArrTime": "12:49",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "VIE",
+                    "Dest": "TXL",
+                    "DepTime": "12:49",
+                    "ArrTime": "15:35",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "MUC",
+                    "Dest": "IST",
+                    "DepTime": "16:21",
+                    "ArrTime": "19:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "CPH",
+                    "Dest": "ZRH",
+                    "DepTime": "19:23",
+                    "ArrTime": "22:56",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "MUC",
+                    "Dest": "TXL",
+                    "DepTime": "08:15",
+                    "ArrTime": "11:06",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "11": {
+                    "Orig": "CPH",
+                    "Dest": "TXL",
+                    "DepTime": "11:06",
+                    "ArrTime": "13:32",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "ORY",
+                    "Dest": "CDG",
+                    "DepTime": "13:32",
+                    "ArrTime": "18:31",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "ORY",
+                    "Dest": "FRA",
+                    "DepTime": "19:52",
+                    "ArrTime": "22:38",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.5,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "05/09/24",
+                        "start_time": "14:28",
+                        "end_date": "05/09/24",
+                        "end_time": "20:57",
+                        "probability": 0.9620986669953043,
+                        "delta_start_minutes": 448,
+                        "unavailability_period_minutes": 389,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00010": {
+            "recovery_start_date": "04/09/24",
+            "recovery_start_time": "6:00",
+            "recovery_end_date": "04/09/24",
+            "recovery_end_time": "23:30",
+            "total_aircraft": 3,
+            "total_flights": 12,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.0,
+                    0.5
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 5,
+                "B737#2": 7,
+                "B737#3": 0
+            },
+            "flights": {
+                "1": {
+                    "Orig": "CDG",
+                    "Dest": "VIE",
+                    "DepTime": "08:00",
+                    "ArrTime": "12:28",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "LHR",
+                    "Dest": "AMS",
+                    "DepTime": "12:28",
+                    "ArrTime": "15:49",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "VIE",
+                    "Dest": "DUB",
+                    "DepTime": "15:49",
+                    "ArrTime": "20:16",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "BCN",
+                    "Dest": "MUC",
+                    "DepTime": "20:16",
+                    "ArrTime": "23:36",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "5": {
+                    "Orig": "CPH",
+                    "Dest": "VIE",
+                    "DepTime": "00:18+1",
+                    "ArrTime": "03:47+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "6": {
+                    "Orig": "BCN",
+                    "Dest": "CDG",
+                    "DepTime": "07:30",
+                    "ArrTime": "10:29",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "IST",
+                    "Dest": "CPH",
+                    "DepTime": "12:01",
+                    "ArrTime": "14:19",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "MAD",
+                    "Dest": "CPH",
+                    "DepTime": "14:19",
+                    "ArrTime": "17:26",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "MUC",
+                    "Dest": "MAD",
+                    "DepTime": "17:26",
+                    "ArrTime": "20:28",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "CPH",
+                    "Dest": "VIE",
+                    "DepTime": "20:28",
+                    "ArrTime": "22:35",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "FRA",
+                    "Dest": "LHR",
+                    "DepTime": "22:35",
+                    "ArrTime": "00:53+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "12": {
+                    "Orig": "AMS",
+                    "Dest": "BCN",
+                    "DepTime": "00:53+1",
+                    "ArrTime": "03:22+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 2,
+                "probability_range": [
+                    0.0,
+                    0.5
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "04/09/24",
+                        "start_time": "10:49",
+                        "end_date": "04/09/24",
+                        "end_time": "13:53",
+                        "probability": 0.49197930108692745,
+                        "delta_start_minutes": 289,
+                        "unavailability_period_minutes": 184,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "04/09/24",
+                        "start_time": "11:42",
+                        "end_date": "04/09/24",
+                        "end_time": "16:06",
+                        "probability": 0.1986190275524744,
+                        "delta_start_minutes": 342,
+                        "unavailability_period_minutes": 264,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00011": {
+            "recovery_start_date": "22/09/24",
+            "recovery_start_time": "5:00",
+            "recovery_end_date": "22/09/24",
+            "recovery_end_time": "22:30",
+            "total_aircraft": 3,
+            "total_flights": 9,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.25,
+                    0.75
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 4,
+                "B737#2": 0,
+                "B737#3": 5
+            },
+            "flights": {
+                "1": {
+                    "Orig": "VIE",
+                    "Dest": "DUB",
+                    "DepTime": "07:45",
+                    "ArrTime": "12:18",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "AMS",
+                    "Dest": "BRU",
+                    "DepTime": "12:18",
+                    "ArrTime": "16:41",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "ZRH",
+                    "Dest": "BCN",
+                    "DepTime": "16:41",
+                    "ArrTime": "19:18",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "VIE",
+                    "Dest": "ZRH",
+                    "DepTime": "19:18",
+                    "ArrTime": "23:00",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "10": {
+                    "Orig": "AMS",
+                    "Dest": "BCN",
+                    "DepTime": "08:15",
+                    "ArrTime": "11:08",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "11": {
+                    "Orig": "LHR",
+                    "Dest": "VIE",
+                    "DepTime": "11:27",
+                    "ArrTime": "15:49",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "ZRH",
+                    "Dest": "BRU",
+                    "DepTime": "15:49",
+                    "ArrTime": "18:16",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "CPH",
+                    "Dest": "DUB",
+                    "DepTime": "18:16",
+                    "ArrTime": "21:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "CPH",
+                    "Dest": "BCN",
+                    "DepTime": "21:23",
+                    "ArrTime": "01:23+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 2,
+                "probability_range": [
+                    0.25,
+                    0.75
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "22/09/24",
+                        "start_time": "10:14",
+                        "end_date": "22/09/24",
+                        "end_time": "18:12",
+                        "probability": 0.326343882240225,
+                        "delta_start_minutes": 314,
+                        "unavailability_period_minutes": 478,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "22/09/24",
+                        "start_time": "08:02",
+                        "end_date": "22/09/24",
+                        "end_time": "11:04",
+                        "probability": 0.41368197565890125,
+                        "delta_start_minutes": 182,
+                        "unavailability_period_minutes": 182,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "stochastic_Scenario_00012": {
+            "recovery_start_date": "02/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "02/09/24",
+            "recovery_end_time": "20:00",
+            "total_aircraft": 3,
+            "total_flights": 7,
+            "disrupted_aircraft": 0,
+            "disruption_probabilities": {
+                "range": [
+                    0.5,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 3,
+                "B737#2": 0,
+                "B737#3": 4
+            },
+            "flights": {
+                "1": {
+                    "Orig": "LHR",
+                    "Dest": "BCN",
+                    "DepTime": "07:45",
+                    "ArrTime": "12:36",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "TXL",
+                    "Dest": "CPH",
+                    "DepTime": "12:36",
+                    "ArrTime": "17:33",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "VIE",
+                    "Dest": "FRA",
+                    "DepTime": "18:11",
+                    "ArrTime": "22:38",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "9": {
+                    "Orig": "TXL",
+                    "Dest": "MUC",
+                    "DepTime": "08:00",
+                    "ArrTime": "12:33",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "10": {
+                    "Orig": "TXL",
+                    "Dest": "VIE",
+                    "DepTime": "12:33",
+                    "ArrTime": "15:02",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "11": {
+                    "Orig": "AMS",
+                    "Dest": "CDG",
+                    "DepTime": "15:02",
+                    "ArrTime": "19:03",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "DUB",
+                    "Dest": "AMS",
+                    "DepTime": "19:03",
+                    "ArrTime": "22:50",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 0,
+                "uncertain_count": 2,
+                "probability_range": [
+                    0.5,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "02/09/24",
+                        "start_time": "13:12",
+                        "end_date": "02/09/24",
+                        "end_time": "16:18",
+                        "probability": 0.739417116824765,
+                        "delta_start_minutes": 372,
+                        "unavailability_period_minutes": 186,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "02/09/24",
+                        "start_time": "13:45",
+                        "end_date": "02/09/24",
+                        "end_time": "17:14",
+                        "probability": 0.751658531871233,
+                        "delta_start_minutes": 405,
+                        "unavailability_period_minutes": 209,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "mixed_Scenario_00013": {
+            "recovery_start_date": "02/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "02/09/24",
+            "recovery_end_time": "20:30",
+            "total_aircraft": 3,
+            "total_flights": 9,
+            "disrupted_aircraft": 1,
+            "disruption_probabilities": {
+                "range": [
+                    0.0,
+                    0.5
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 5,
+                "B737#2": 0,
+                "B737#3": 4
+            },
+            "flights": {
+                "1": {
+                    "Orig": "IST",
+                    "Dest": "AMS",
+                    "DepTime": "07:00",
+                    "ArrTime": "09:11",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "CPH",
+                    "Dest": "AMS",
+                    "DepTime": "09:11",
+                    "ArrTime": "12:42",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "AMS",
+                    "Dest": "MAD",
+                    "DepTime": "13:05",
+                    "ArrTime": "16:16",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "ZRH",
+                    "Dest": "DUB",
+                    "DepTime": "16:16",
+                    "ArrTime": "18:47",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "5": {
+                    "Orig": "CDG",
+                    "Dest": "VIE",
+                    "DepTime": "18:47",
+                    "ArrTime": "21:27",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "11": {
+                    "Orig": "TXL",
+                    "Dest": "VIE",
+                    "DepTime": "08:45",
+                    "ArrTime": "13:40",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "ZRH",
+                    "Dest": "BRU",
+                    "DepTime": "13:40",
+                    "ArrTime": "17:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "IST",
+                    "Dest": "MAD",
+                    "DepTime": "17:23",
+                    "ArrTime": "21:01",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "14": {
+                    "Orig": "DUB",
+                    "Dest": "BRU",
+                    "DepTime": "21:01",
+                    "ArrTime": "23:15",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 1,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.0,
+                    0.5
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "02/09/24",
+                        "start_time": "11:29",
+                        "end_date": "02/09/24",
+                        "end_time": "14:54",
+                        "probability": 1.0,
+                        "delta_start_minutes": 269,
+                        "unavailability_period_minutes": 205,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "02/09/24",
+                        "start_time": "11:32",
+                        "end_date": "02/09/24",
+                        "end_time": "18:53",
+                        "probability": 0.40541642077726053,
+                        "delta_start_minutes": 272,
+                        "unavailability_period_minutes": 441,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "mixed_Scenario_00014": {
+            "recovery_start_date": "28/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "28/09/24",
+            "recovery_end_time": "23:30",
+            "total_aircraft": 3,
+            "total_flights": 10,
+            "disrupted_aircraft": 1,
+            "disruption_probabilities": {
+                "range": [
+                    0.25,
+                    0.75
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 0,
+                "B737#2": 5,
+                "B737#3": 5
+            },
+            "flights": {
+                "4": {
+                    "Orig": "LHR",
+                    "Dest": "BCN",
+                    "DepTime": "08:30",
+                    "ArrTime": "11:30",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "5": {
+                    "Orig": "IST",
+                    "Dest": "BRU",
+                    "DepTime": "11:30",
+                    "ArrTime": "15:31",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "6": {
+                    "Orig": "ZRH",
+                    "Dest": "BCN",
+                    "DepTime": "15:31",
+                    "ArrTime": "19:07",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "DUB",
+                    "Dest": "MUC",
+                    "DepTime": "19:07",
+                    "ArrTime": "22:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "TXL",
+                    "Dest": "ORY",
+                    "DepTime": "22:23",
+                    "ArrTime": "00:41+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "BRU",
+                    "Dest": "CPH",
+                    "DepTime": "08:45",
+                    "ArrTime": "11:14",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "10": {
+                    "Orig": "DUB",
+                    "Dest": "CPH",
+                    "DepTime": "11:14",
+                    "ArrTime": "14:36",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "11": {
+                    "Orig": "MAD",
+                    "Dest": "IST",
+                    "DepTime": "15:24",
+                    "ArrTime": "19:54",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "12": {
+                    "Orig": "TXL",
+                    "Dest": "DUB",
+                    "DepTime": "19:54",
+                    "ArrTime": "22:02",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                },
+                "13": {
+                    "Orig": "MUC",
+                    "Dest": "AMS",
+                    "DepTime": "22:02",
+                    "ArrTime": "02:42+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#3"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 1,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.25,
+                    0.75
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "28/09/24",
+                        "start_time": "10:52",
+                        "end_date": "28/09/24",
+                        "end_time": "16:42",
+                        "probability": 1.0,
+                        "delta_start_minutes": 232,
+                        "unavailability_period_minutes": 350,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#3",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "28/09/24",
+                        "start_time": "11:33",
+                        "end_date": "28/09/24",
+                        "end_time": "17:45",
+                        "probability": 0.41993442827356453,
+                        "delta_start_minutes": 273,
+                        "unavailability_period_minutes": 372,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        },
+        "mixed_Scenario_00015": {
+            "recovery_start_date": "04/09/24",
+            "recovery_start_time": "7:00",
+            "recovery_end_date": "04/09/24",
+            "recovery_end_time": "22:30",
+            "total_aircraft": 3,
+            "total_flights": 11,
+            "disrupted_aircraft": 1,
+            "disruption_probabilities": {
+                "range": [
+                    0.5,
+                    1.0
+                ],
+                "distribution": "uniform"
+            },
+            "aircraft_ids": [
+                "B737#1",
+                "B737#2",
+                "B737#3"
+            ],
+            "flights_per_aircraft": {
+                "B737#1": 5,
+                "B737#2": 6,
+                "B737#3": 0
+            },
+            "flights": {
+                "1": {
+                    "Orig": "FRA",
+                    "Dest": "TXL",
+                    "DepTime": "07:45",
+                    "ArrTime": "11:58",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "2": {
+                    "Orig": "TXL",
+                    "Dest": "BRU",
+                    "DepTime": "11:58",
+                    "ArrTime": "14:39",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "3": {
+                    "Orig": "LHR",
+                    "Dest": "DUB",
+                    "DepTime": "14:39",
+                    "ArrTime": "16:56",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "4": {
+                    "Orig": "ZRH",
+                    "Dest": "BCN",
+                    "DepTime": "16:56",
+                    "ArrTime": "21:30",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "5": {
+                    "Orig": "DUB",
+                    "Dest": "MAD",
+                    "DepTime": "21:30",
+                    "ArrTime": "00:13+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#1"
+                },
+                "6": {
+                    "Orig": "BRU",
+                    "Dest": "TXL",
+                    "DepTime": "07:00",
+                    "ArrTime": "10:37",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "7": {
+                    "Orig": "DUB",
+                    "Dest": "MUC",
+                    "DepTime": "10:37",
+                    "ArrTime": "14:14",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "8": {
+                    "Orig": "TXL",
+                    "Dest": "ZRH",
+                    "DepTime": "14:14",
+                    "ArrTime": "17:36",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "9": {
+                    "Orig": "FRA",
+                    "Dest": "BRU",
+                    "DepTime": "17:36",
+                    "ArrTime": "20:32",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "10": {
+                    "Orig": "CPH",
+                    "Dest": "MAD",
+                    "DepTime": "20:32",
+                    "ArrTime": "23:23",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                },
+                "11": {
+                    "Orig": "LHR",
+                    "Dest": "MAD",
+                    "DepTime": "23:23",
+                    "ArrTime": "03:16+1",
+                    "PrevFlight": 0,
+                    "Aircraft": "B737#2"
+                }
+            },
+            "disruptions": {
+                "total_aircraft": 3,
+                "disrupted_count": 1,
+                "uncertain_count": 1,
+                "probability_range": [
+                    0.5,
+                    1.0
+                ],
+                "disruptions": [
+                    {
+                        "aircraft_id": "B737#1",
+                        "is_disrupted": true,
+                        "is_uncertain": false,
+                        "start_date": "04/09/24",
+                        "start_time": "13:40",
+                        "end_date": "04/09/24",
+                        "end_time": "20:09",
+                        "probability": 1.0,
+                        "delta_start_minutes": 400,
+                        "unavailability_period_minutes": 389,
+                        "crosses_midnight": false
+                    },
+                    {
+                        "aircraft_id": "B737#2",
+                        "is_disrupted": false,
+                        "is_uncertain": true,
+                        "start_date": "04/09/24",
+                        "start_time": "10:17",
+                        "end_date": "04/09/24",
+                        "end_time": "14:18",
+                        "probability": 0.9608248516183573,
+                        "delta_start_minutes": 197,
+                        "unavailability_period_minutes": 241,
+                        "crosses_midnight": false
+                    }
+                ]
+            }
+        }
+    }
+}

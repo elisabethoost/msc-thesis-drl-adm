@@ -64,15 +64,15 @@ RESOLVED_CONFLICT_REWARD = 10           # Legacy value (not used with negative-o
 # Penalty Enable/Disable Flags for Incremental Testing
 # Set to True to enable, False to disable
 # Start with only PENALTY_1_ENABLED = True, then gradually enable others
-PENALTY_1_DELAY_ENABLED = True          # Delay penalty
-PENALTY_2_CANCELLATION_ENABLED = True  # Cancellation penalty
-PENALTY_3_INACTION_ENABLED = True      # Inaction penalty
+PENALTY_1_DELAY_ENABLED = False          # Delay penalty
+PENALTY_2_CANCELLATION_ENABLED = False  # Cancellation penalty
+PENALTY_3_INACTION_ENABLED = False      # Inaction penalty
 PENALTY_4_PROACTIVE_ENABLED = False     # Proactive penalty (last-minute actions)
-PENALTY_5_TIME_ENABLED = True          # Time penalty (cumulative)
-PENALTY_6_FINAL_REWARD_ENABLED = True  # Final conflict resolution reward (not a penalty, but can be disabled)
-PENALTY_7_AUTO_CANCELLATION_ENABLED = True  # Automatic cancellation penalty
+PENALTY_5_TIME_ENABLED = False          # Time penalty (cumulative)
+PENALTY_6_FINAL_REWARD_ENABLED = False  # Final conflict resolution reward (not a penalty, but can be disabled)
+PENALTY_7_AUTO_CANCELLATION_ENABLED = False  # Automatic cancellation penalty
 PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED = True  # Probability-weighted resolution bonus
-PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED = True  # Low-confidence action penalty
+PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED = False  # Low-confidence action penalty
 
 # Feature engineering / temporal context settings
 ENABLE_TEMPORAL_DERIVED_FEATURES = True   # Append engineered temporal features per aircraft

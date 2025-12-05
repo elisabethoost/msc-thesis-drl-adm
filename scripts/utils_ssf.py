@@ -37,69 +37,78 @@ def read_csv_with_comments(file_path):
         return []
     
 
-def load_scenario_data(scenario_folder):
-    file_keys = ['aircraft', 'airports', 'alt_aircraft', 'alt_airports', 'alt_flights', 'config', 'dist', 'flights', 'itineraries', 'position', 'rotations']
-    file_paths = {key: os.path.join(scenario_folder, f"{key}.csv") for key in file_keys}
+def count_flights_in_scenario(scenario_folder):
+    """Counts the number of flights in a scenario by reading flights.csv.
+    
+    Args:
+        scenario_folder (str): Path to the scenario folder containing flights.csv
+        
+    Returns:
+        int: Number of flights (excluding header row)
+    """
+    flights_file = os.path.join(scenario_folder, 'flights.csv')
+    if not os.path.exists(flights_file):
+        return 0
+    
+    try:
+        with open(flights_file, 'r') as file:
+            lines = file.readlines()
+        
+        flight_count = 0
+        for line in lines:
+            line = line.strip()
+            if line.startswith('#'):
+                break  # Stop at end marker
+            if line.startswith('%'):
+                continue  # Skip header lines
+            if line:  # Count non-empty data lines
+                flight_count += 1
+        
+        return flight_count
+    except Exception as e:
+        print(f"Error counting flights in {flights_file}: {e}")
+        return 0
 
-    data_dict = {}
-    file_parsing_functions = {
-        'config': FileParsers.parse_config,
-        'airports': FileParsers.parse_airports,
-        'dist': FileParsers.parse_dist,
-        'flights': FileParsers.parse_flights,
-        'aircraft': FileParsers.parse_aircraft,
-        'rotations': FileParsers.parse_rotations,
-        'itineraries': FileParsers.parse_itineraries,
-        'position': FileParsers.parse_position,
-        'alt_flights': FileParsers.parse_alt_flights,
-        'alt_aircraft': FileParsers.parse_alt_aircraft,
-        'alt_airports': FileParsers.parse_alt_airports
-    }
 
-    # Iterate over each file and process it using the correct parsing function
-    for file_type, file_path in file_paths.items():
-        file_lines = read_csv_with_comments(file_path)
-        if file_lines:
-            parse_function = file_parsing_functions.get(file_type)
-            if parse_function:
-                parsed_data = parse_function(file_lines)
-                data_dict[file_type] = parsed_data
-            else:
-                print(f"No parser available for file type: {file_type}")
-        else:
-            data_dict[file_type] = None
+def find_max_flights_in_training_data(training_folders_path):
+    """Scans all training scenarios to find the maximum number of flights.
+    
+    This function recursively searches through all scenario folders in the training
+    data directory and finds the maximum number of flights across all scenarios.
+    This is useful for optimizing Model 3 (SSF Large Dimensions) state space size.
+    
+    Args:
+        training_folders_path (str): Path to the training data folder (e.g., 'Data/TRAINING/3ac-182-green16/')
+        
+    Returns:
+        int: Maximum number of flights found across all scenarios, or None if no scenarios found
+    """
+    if not os.path.exists(training_folders_path):
+        print(f"Warning: Training folder path does not exist: {training_folders_path}")
+        return None
+    
+    max_flights = 0
+    scenario_count = 0
+    
+    # Find all scenario folders (directories containing flights.csv)
+    for root, dirs, files in os.walk(training_folders_path):
+        if 'flights.csv' in files:
+            scenario_count += 1
+            flight_count = count_flights_in_scenario(root)
+            if flight_count > max_flights:
+                max_flights = flight_count
+                if DEBUG_MODE:
+                    print(f"New max found: {max_flights} flights in {root}")
+    
+    if scenario_count == 0:
+        print(f"Warning: No scenarios found in {training_folders_path}")
+        return None
+    
+    print(f"Scanned {scenario_count} scenarios in {training_folders_path}")
+    print(f"Maximum flights found: {max_flights}")
+    
+    return max_flights
 
-    # # Fix the alt_aircraft file: if the arrival time is before the departure time, add 24 hours to the arrival time
-    # if data_dict['alt_aircraft']:
-    #     print(f"Fixing alt_aircraft file")
-    #     print(data_dict['alt_aircraft'])
-    #     """
-    #     data_dict['alt_aircraft'] is of this form:
-    #     {'A320#1': {'StartDate': '14/09/24', 'StartTime': '08:02', 'EndDate': '14/09/24', 'EndTime': '23:29', 'Probability': 0.17}, 'A320#2': {'StartDate': '14/09/24', 'StartTime': '08:15', 'EndDate': '14/09/24', 'EndTime': '13:13', 'Probability': 0.31}, 'A320#3': {'StartDate': '14/09/24', 'StartTime': '08:12', 'EndDate': '14/09/24', 'EndTime': '15:54', 'Probability': 0.0}}
-    #     """
-    #     for aircraft in data_dict['alt_aircraft']:
-    #         for flight in data_dict['alt_aircraft'][aircraft]:
-    #             deptime = data_dict['alt_aircraft'][aircraft]['StartTime']
-    #             print(f"deptime: {deptime}")
-    #             arrtime = data_dict['alt_aircraft'][aircraft]['EndTime']
-    #             print(f"arrtime: {arrtime}")
-    #             if arrtime < deptime:
-    #                 # add one day to the end date
-    #                 data_dict['alt_aircraft'][aircraft]['EndDate'] = (datetime.strptime(data_dict['alt_aircraft'][aircraft]['EndDate'], '%d/%m/%y') + timedelta(days=1)).strftime('%d/%m/%y')
-    return data_dict
-
-# Clear file content
-def clear_file(file_name):
-    """Clears the content of a file."""
-    with open(file_name, 'w') as file:
-        file.write('')
-
-# Convert time to string
-def convert_time_to_str(current_datetime, time_obj):
-    time_str = time_obj.strftime('%H:%M')
-    if time_obj.date() > current_datetime.date():
-        time_str += ' +1'
-    return time_str
 
 def parse_time_with_day_offset(time_str, reference_date):
     """
@@ -109,6 +118,9 @@ def parse_time_with_day_offset(time_str, reference_date):
     Args:
         time_str: Either a string in 'HH:MM' format or a datetime object
         reference_date: Reference date for parsing
+        
+    Returns:
+        datetime: Parsed datetime object with day offset if needed
     """
     # If time_str is already a datetime object, return it directly
     if isinstance(time_str, datetime):
@@ -121,97 +133,11 @@ def parse_time_with_day_offset(time_str, reference_date):
         time_obj = datetime.strptime(time_str, '%H:%M')
         # Add 1 day to the time
         return datetime.combine(reference_date, time_obj.time()) + timedelta(days=1)
-    else:
-        # No '+1', parse the time normally
-        time_obj = datetime.strptime(time_str, '%H:%M')
-        parsed_time = datetime.combine(reference_date, time_obj.time())
-        
-        # If the parsed time is earlier than the reference time, it's the next day
-        if parsed_time < reference_date:
-            parsed_time += timedelta(days=1)
-            
-        return parsed_time
-# Print state
-def print_state_nicely(state):
-    # First print the information row in tabular form
-    info_row = state[0]
-    print("\nCurrent State:")
-    # print("┌────────────────────┬────────────────────┬────────────────────┬────────────────────┐")
-    print("│ Current Time       │ Time Until End     │   ")
-    # print("├────────────────────┼────────────────────┼────────────────────┼────────────────────┤")
-    print(f"│ {int(info_row[0]) if not np.isnan(info_row[0]) else '-':^19}│ "
-          f"{int(info_row[1]) if not np.isnan(info_row[1]) else '-':^19}│")
-    # print("└────────────────────┴────────────────────┴────────────────────┴────────────────────┘")
-    print("")  # Empty line for separation
     
-    # Define column widths with extra space for non-flight headers
-    ac_width = 4
-    prob_width = 6
-    start_width = 6
-    end_width = 5
-    flight_width = 5
-    time_width = 5
-    
-    # Generate headers dynamically with proper spacing
-    headers = [
-        f"{'AC':>{ac_width}}", 
-        f"{'Prob':>{prob_width}}", 
-        f"{'Start':>{start_width}}", 
-        f"{'End':>{end_width}}"
-    ]
-    
-    # Add flight headers with proper spacing
-    for i in range(1, MAX_FLIGHTS_PER_AIRCRAFT + 1):
-        headers.extend([
-            f"| {'F'+str(i):>{flight_width}}", 
-            f"{'Dep'+str(i):>{time_width}}", 
-            f"{'Arr'+str(i):>{time_width}}"
-        ])
-    
-    # Print headers
-    print(" ".join(headers))
-    
-    # Print state rows with matching alignment
-    formatted_rows = []
-    current_time = info_row[0] if not np.isnan(info_row[0]) else 0
-    
-    for row in state[1:]:
-        formatted_values = []
-        for i, x in enumerate(row):
-            # Add vertical line before flight groups
-            if i >= 4 and (i - 4) % 3 == 0:
-                formatted_values.append("|")
-                
-            if np.isnan(x):
-                formatted_values.append(f"{'-':>{time_width}}" if i >= 4 else 
-                                     f"{'-':>{ac_width}}" if i == 0 else
-                                     f"{'-':>{prob_width}}" if i == 1 else
-                                     f"{'-':>{start_width}}" if i == 2 else
-                                     f"{'-':>{end_width}}")
-            else:
-                if i == 0:  # Aircraft index
-                    formatted_values.append(f"{float(x):>{ac_width}.0f}")
-                elif i == 1:  # Probability
-                    if x == 0.0:
-                        formatted_values.append(f"{'-':>{prob_width}}")
-                    else:
-                        formatted_values.append(f"{float(x):>{prob_width}.2f}")
-                elif i == 2:  # Start time
-                    formatted_values.append(f"{float(x):>{start_width}.0f}")
-                elif i == 3:  # End time
-                    formatted_values.append(f"{float(x):>{end_width}.0f}")
-                else:  # Flight numbers and times
-                    formatted_values.append(f"{float(x):>{time_width}.0f}")
-        formatted_rows.append(" ".join(formatted_values))
-    
-    print('\n'.join(formatted_rows))
+    # Otherwise, parse normally
+    time_obj = datetime.strptime(time_str, '%H:%M')
+    return datetime.combine(reference_date, time_obj.time())
 
-def print_state_semi_raw(state):
-    info_row = state[0]
-    print(info_row)
-
-def print_state_raw(state, env_type):
-    print(state)
 
 # Parsing all the data files. Parsing means converting the data from a string format to a dictionary format.
 class FileParsers:
@@ -332,29 +258,9 @@ class FileParsers:
                 'StartTime': parts[2],
                 'EndDate': parts[3],
                 'EndTime': parts[4],
-                # 'Probability': float(parts[5]) if len(parts) > 5 else 1.0  # Default to 1.0 if probability not specified
-                'Probability': float(parts[5]) # original code
+                'Probability': float(parts[5])
             }
         return alt_aircraft_dict
-    
-    # @staticmethod
-    # def parse_alt_aircraft(data_lines):
-    #     """Parses the alt_aircraft file into a dictionary."""
-    #     if data_lines is None:
-    #         return {}
-
-    #     alt_aircraft_dict = {}
-    #     for line in data_lines:
-    #         parts = re.split(r'\s+', line)
-    #         alt_aircraft_dict[parts[0]] = {
-    #             'StartDate': parts[1],
-    #             'StartTime': parts[2],
-    #             'EndDate': parts[3],
-    #             'EndTime': parts[4],
-    #             'Probability': float(parts[5])
-    #         }
-    #     return alt_aircraft_dict
-
 
     @staticmethod
     def parse_alt_airports(data_lines):
@@ -379,220 +285,56 @@ class FileParsers:
         return alt_airports_dict
 
 
+def load_scenario_data(scenario_folder):
+    file_keys = ['aircraft', 'airports', 'alt_aircraft', 'alt_airports', 'alt_flights', 'config', 'dist', 'flights', 'itineraries', 'position', 'rotations']
+    file_paths = {key: os.path.join(scenario_folder, f"{key}.csv") for key in file_keys}
 
-# Data Processing Function
-def load_data(data_folder):
-    """Loads all the CSV files and returns a dictionary with parsed data."""
-    
-    # File paths
-    aircraft_file = os.path.join(data_folder, 'aircraft.csv')
-    airports_file = os.path.join(data_folder, 'airports.csv')
-    alt_aircraft_file = os.path.join(data_folder, 'alt_aircraft.csv')
-    alt_airports_file = os.path.join(data_folder, 'alt_airports.csv')
-    alt_flights_file = os.path.join(data_folder, 'alt_flights.csv')
-    config_file = os.path.join(data_folder, 'config.csv')
-    dist_file = os.path.join(data_folder, 'dist.csv')
-    flights_file = os.path.join(data_folder, 'flights.csv')
-    itineraries_file = os.path.join(data_folder, 'itineraries.csv')
-    positions_file = os.path.join(data_folder, 'position.csv')
-    rotations_file = os.path.join(data_folder, 'rotations.csv')
-
-    data_dict = {
-        'config': FileParsers.parse_config(read_csv_with_comments(config_file)) if read_csv_with_comments(config_file) else {},
-        'aircraft': FileParsers.parse_aircraft(read_csv_with_comments(aircraft_file)) if read_csv_with_comments(aircraft_file) else {},
-        'airports': FileParsers.parse_airports(read_csv_with_comments(airports_file)) if read_csv_with_comments(airports_file) else {},
-        'dist': FileParsers.parse_dist(read_csv_with_comments(dist_file)) if read_csv_with_comments(dist_file) else {},
-        'flights': FileParsers.parse_flights(read_csv_with_comments(flights_file)) if read_csv_with_comments(flights_file) else {},
-        'rotations': FileParsers.parse_rotations(read_csv_with_comments(rotations_file)) if read_csv_with_comments(rotations_file) else {},
-        'itineraries': FileParsers.parse_itineraries(read_csv_with_comments(itineraries_file)) if read_csv_with_comments(itineraries_file) else {},
-        'position': FileParsers.parse_position(read_csv_with_comments(positions_file)) if read_csv_with_comments(positions_file) else {},
-        'alt_flights': FileParsers.parse_alt_flights(read_csv_with_comments(alt_flights_file)),
-        'alt_aircraft': FileParsers.parse_alt_aircraft(read_csv_with_comments(alt_aircraft_file)),
-        'alt_airports': FileParsers.parse_alt_airports(read_csv_with_comments(alt_airports_file))
+    data_dict = {}
+    file_parsing_functions = {
+        'config': FileParsers.parse_config,
+        'airports': FileParsers.parse_airports,
+        'dist': FileParsers.parse_dist,
+        'flights': FileParsers.parse_flights,
+        'aircraft': FileParsers.parse_aircraft,
+        'rotations': FileParsers.parse_rotations,
+        'itineraries': FileParsers.parse_itineraries,
+        'position': FileParsers.parse_position,
+        'alt_flights': FileParsers.parse_alt_flights,
+        'alt_aircraft': FileParsers.parse_alt_aircraft,
+        'alt_airports': FileParsers.parse_alt_airports
     }
-    
-    return data_dict
 
-
-# Check the trained_models folder, split each name by "-" and see the last part, which is the model version. add one to it and return it as a string
-def get_model_version(model_name, myopic_proactive, drl_type):
-    print(f"Getting model version for {model_name}")
-    
-    model_number = 1
-    for file in os.listdir(f'../trained_models/{drl_type}'):
-
-        # drop the -x in the end
-        file_model_name = file.split('-')[0]
-
-        if file_model_name == model_name:
-            model_number += 1
-    return str(model_number)
-
-# Check the trained_models folder, split each name by "-" and see the last part, which is the model version. add one to it and return it as a string
-def get_model_version_from_root(model_name, model_type):
-    print(f"Getting model version for {model_name}")
-    
-    model_number = 1
-    for file in os.listdir(f'trained_models/dqn/{model_type}'):
-
-        # drop the -x in the end
-        file_model_name = file.split('-')[0]
-
-        if file_model_name == model_name:
-            model_number += 1
-    return str(model_number)
-
-
-
-def format_time(time_dt, start_datetime):
-    # Calculate the number of days difference from the start date
-    delta_days = (time_dt.date() - start_datetime.date()).days
-    time_str = time_dt.strftime('%H:%M')
-    if delta_days >= 1:
-        time_str += f'+{delta_days}'
-    return time_str
-
-
-def print_train_hyperparams():
-    hyperparams = {
-        "LEARNING_RATE": LEARNING_RATE,
-        "GAMMA": GAMMA,
-        "BUFFER_SIZE": BUFFER_SIZE,
-        "BATCH_SIZE": BATCH_SIZE,
-        "TARGET_UPDATE_INTERVAL": TARGET_UPDATE_INTERVAL,
-        "EPSILON_START": EPSILON_START,
-        "EPSILON_MIN": EPSILON_MIN,
-        "EPSILON_DECAY_RATE": EPSILON_DECAY_RATE,
-        "MAX_TIMESTEPS": MAX_TIMESTEPS,
-    }
-    
-    for param, value in hyperparams.items():
-        print(f"{param}: {value}")
-    print("")
-
-
-def save_best_and_worst_to_csv(scenario_folder, model_name, worst_actions, best_actions, worst_reward, best_reward):
-    """Save the worst and best action sequences to a CSV file."""
-    csv_file = os.path.join(scenario_folder, 'action_sequences.csv')
-    
-    # Check if the file exists; if not, create and write headers
-    file_exists = os.path.isfile(csv_file)
-    
-    with open(csv_file, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        
-        if not file_exists:
-            # Write headers if file doesn't exist
-            writer.writerow(['model_name', 'sequence_type', 'actions', 'reward'])
-        
-        # Append worst and best action sequences
-        writer.writerow([model_name, "worst action sequence", worst_actions, worst_reward])
-        writer.writerow([model_name, "best action sequence", best_actions, best_reward])
-
-
-import subprocess
-import platform
-
-
-def get_macbook_info():
-    model_info = subprocess.run(["system_profiler", "SPHardwareDataType"], capture_output=True, text=True)
-    output = model_info.stdout
-    
-    # Extract relevant information
-    model_name = re.search(r"Model Name: (.*)", output)
-    chip = re.search(r"Chip: (.*)", output)
-    total_cores = re.search(r"Total Number of Cores: (.*)", output)
-    memory = re.search(r"Memory: (.*)", output)
-    
-    info = {
-        "Model Name": model_name.group(1) if model_name else "Unknown",
-        "Chip": chip.group(1) if chip else "Unknown",
-        "Total Cores": total_cores.group(1) if total_cores else "Unknown",
-        "Memory": memory.group(1) if memory else "Unknown"
-    }
-    
-    return info
-
-
-
-def get_gpu_info():
-    if platform.system() == "Darwin":  # macOS
-        gpu_info = subprocess.run(["system_profiler", "SPDisplaysDataType"], capture_output=True, text=True)
-        output = gpu_info.stdout
-        chipset_model = re.search(r"Chipset Model: (.*)", output)
-        type = re.search(r"Type: (.*)", output)
-        return {
-            "Chipset Model": chipset_model.group(1) if chipset_model else "Unknown",
-            "Type": type.group(1) if type else "Unknown"
-        }
-    elif platform.system() == "Windows" or platform.system() == "Linux":
-        gpu_info = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], capture_output=True, text=True)
-        output = gpu_info.stdout.strip()
-        if output:
-            name, memory = output.split(', ')
-            return {
-                "GPU Name": name,
-                "Memory Total": memory
-            }
+    # Iterate over each file and process it using the correct parsing function
+    for file_type, file_path in file_paths.items():
+        file_lines = read_csv_with_comments(file_path)
+        if file_lines:
+            parse_function = file_parsing_functions.get(file_type)
+            if parse_function:
+                parsed_data = parse_function(file_lines)
+                data_dict[file_type] = parsed_data
+            else:
+                print(f"No parser available for file type: {file_type}")
         else:
-            return "No NVIDIA GPU found or `nvidia-smi` not available."
-    else:
-        return "Unsupported OS"
+            data_dict[file_type] = None
 
-
-
-def get_l40s_info():
-    # Querying memory usage, GPU utilization, temperature, etc.
-    gpu_info = subprocess.run(
-        ["nvidia-smi", "--query-gpu=name,driver_version,memory.total,memory.used,memory.free,utilization.gpu,temperature.gpu",
-         "--format=csv,noheader"],
-        capture_output=True, text=True
-    )
-    output = gpu_info.stdout.strip()
-    if output:
-        fields = output.split(', ')
-        return {
-            "GPU Name": fields[0],
-            "Driver Version": fields[1],
-            "Total Memory": fields[2],
-            "Used Memory": fields[3],
-            "Free Memory": fields[4],
-            "GPU Utilization": fields[5],
-            "Temperature": fields[6]
-        }
-    else:
-        return "No detailed information available or `nvidia-smi` not available."
-
-
-
-# device_info = get_l40s_info()
-# print("Detailed GPU Info:", device_info)
-
-
-def initialize_device():
-    """Initialize and return the computation device."""
-    if th.cuda.is_available():
-        device = th.device('cuda')
-        gpu_name = th.cuda.get_device_name(0)
-        gpu_memory = th.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
-        print("=" * 60)
-        print(f"[OK] NVIDIA GPU DETECTED: {gpu_name}")
-        # print(f"[OK] GPU Memory: {gpu_memory:.2f} GB")
-        # print(f"[OK] Training will use GPU: {device}")
-        # print(f"[OK] CUDA Version: {th.version.cuda}")
-        print("=" * 60)
-    elif th.backends.mps.is_available():
-        device = th.device('mps')
-        print(f"[WARNING] Using Apple Silicon (MPS) - GPU acceleration available")
-        print(f"Using device: {device}")
-    else:
-        device = th.device('cpu')
-        print("=" * 60)
-        print("[WARNING] No GPU detected, using CPU (training will be slower)")
-        print("Using device: cpu")
-        print("=" * 60)
-
-    return device
+    # # Fix the alt_aircraft file: if the arrival time is before the departure time, add 24 hours to the arrival time
+    # if data_dict['alt_aircraft']:
+    #     print(f"Fixing alt_aircraft file")
+    #     print(data_dict['alt_aircraft'])
+    #     """
+    #     data_dict['alt_aircraft'] is of this form:
+    #     {'A320#1': {'StartDate': '14/09/24', 'StartTime': '08:02', 'EndDate': '14/09/24', 'EndTime': '23:29', 'Probability': 0.17}, 'A320#2': {'StartDate': '14/09/24', 'StartTime': '08:15', 'EndDate': '14/09/24', 'EndTime': '13:13', 'Probability': 0.31}, 'A320#3': {'StartDate': '14/09/24', 'StartTime': '08:12', 'EndDate': '14/09/24', 'EndTime': '15:54', 'Probability': 0.0}}
+    #     """
+    #     for aircraft in data_dict['alt_aircraft']:
+    #         for flight in data_dict['alt_aircraft'][aircraft]:
+    #             deptime = data_dict['alt_aircraft'][aircraft]['StartTime']
+    #             print(f"deptime: {deptime}")
+    #             arrtime = data_dict['alt_aircraft'][aircraft]['EndTime']
+    #             print(f"arrtime: {arrtime}")
+    #             if arrtime < deptime:
+    #                 # add one day to the end date
+    #                 data_dict['alt_aircraft'][aircraft]['EndDate'] = (datetime.strptime(data_dict['alt_aircraft'][aircraft]['EndDate'], '%d/%m/%y') + timedelta(days=1)).strftime('%d/%m/%y')
+    return data_dict
 
 
 def get_device_info(device):
@@ -618,7 +360,7 @@ def check_device_capabilities():
     print("CUDA available:", th.cuda.is_available())
     print("Number of GPUs available:", th.cuda.device_count())
     if th.cuda.is_available():
-        print("Current GPU name:", th.cuda.get_device_name())
+        print("Current GPU name:", th.cuda.get_device_name(0))
     print("cuDNN enabled:", th.backends.cudnn.enabled)
 
 
@@ -657,6 +399,27 @@ def create_results_directory(base_dir='../results', append_to_name=''):
     os.makedirs(os.path.join(results_dir, 'plots'), exist_ok=True)
     return results_dir
 
+
+def initialize_device():
+    """Initialize and return the computation device."""
+    if th.cuda.is_available():
+        device = th.device('cuda')
+        gpu_name = th.cuda.get_device_name(0)
+        print("=" * 60)
+        print(f"[OK] NVIDIA GPU DETECTED: {gpu_name}")
+        print("=" * 60)
+    elif th.backends.mps.is_available():
+        device = th.device('mps')
+        print(f"[WARNING] Using Apple Silicon (MPS) - GPU acceleration available")
+        print(f"Using device: {device}")
+    else:
+        device = th.device('cpu')
+        print("=" * 60)
+        print("[WARNING] No GPU detected, using CPU (training will be slower)")
+        print("=" * 60)
+    return device
+
+
 def calculate_epsilon_decay_rate(total_timesteps, epsilon_start, epsilon_min, percentage_min=95, EPSILON_TYPE="exponential"):
     """
     Calculates the decay rate for epsilon such that it reaches epsilon_min after the specified percentage of total timesteps.
@@ -666,6 +429,7 @@ def calculate_epsilon_decay_rate(total_timesteps, epsilon_start, epsilon_min, pe
         epsilon_start (float): Initial epsilon value for exploration.
         epsilon_min (float): Minimum epsilon value for exploration.
         percentage_min (float): Percentage of timesteps at which epsilon should reach epsilon_min (default is 95%).
+        EPSILON_TYPE (str): Type of decay ("exponential", "linear", or "mixed").
 
     Returns:
         float: Calculated epsilon decay rate.
@@ -678,15 +442,17 @@ def calculate_epsilon_decay_rate(total_timesteps, epsilon_start, epsilon_min, pe
         decay_rate = -np.log(epsilon_min / epsilon_start) / target_timesteps
     elif EPSILON_TYPE == "linear":
         decay_rate = (epsilon_start - epsilon_min) / target_timesteps
+    elif EPSILON_TYPE == "mixed":
+        decay_rate = -np.log(epsilon_min / epsilon_start) / target_timesteps
+        decay_rate_linear = (epsilon_start - epsilon_min) / target_timesteps
+        return decay_rate, decay_rate_linear
 
     print(f"Calculated EPSILON_DECAY_RATE: {decay_rate}")
     return decay_rate
 
 
-import json
-import numpy as np
-
 class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy types."""
     def default(self, obj):
         if isinstance(obj, (np.integer, np.int32, np.int64)):
             return int(obj)
@@ -694,47 +460,6 @@ class NumpyEncoder(json.JSONEncoder):
             return float(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
+        elif isinstance(obj, (np.bool_, bool)):
+            return bool(obj)
         return super().default(obj)
-
-def load_json(file_path):
-    with open(f"{file_path}", 'r') as f:
-        return json.load(f)
-
-def get_training_metadata(training_logs_path, env_type):
-    training_metadata = load_json(training_logs_path)
-    return training_metadata['metadata']
-
-
-def check_conflicts_between_training_and_current_config(training_logs_path, env_type, inference_config_variables):
-    training_config_variables = get_training_metadata(training_logs_path, env_type)
-
-    print(f"Training Config Variables: {training_config_variables}")
-    print(f"Inference Config Variables: {inference_config_variables}")
-    
-    matching_variables = {}
-    conflicting_variables = {}
-
-    # List of reward-related config variables to check
-    reward_variables = [
-        'RESOLVED_CONFLICT_REWARD',
-        'DELAY_MINUTE_PENALTY',
-        'MAX_DELAY_PENALTY',
-        'NO_ACTION_PENALTY',
-        'CANCELLED_FLIGHT_PENALTY',
-        'LAST_MINUTE_THRESHOLD',
-        'LAST_MINUTE_FLIGHT_PENALTY',
-        'AHEAD_BONUS_PER_MINUTE',
-        'TIME_MINUTE_PENALTY'
-    ]
-
-    for key in reward_variables:
-        if key in inference_config_variables:
-            value = inference_config_variables[key]
-            if key not in training_config_variables:
-                conflicting_variables[key] = value
-            elif training_config_variables[key] != value:
-                conflicting_variables[key] = value
-            else:
-                matching_variables[key] = value
-
-    return matching_variables, conflicting_variables

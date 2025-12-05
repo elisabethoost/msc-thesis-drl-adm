@@ -1,5 +1,11 @@
 import os
 import sys
+
+# Add project root to path so we can import from scripts and src
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
@@ -1036,13 +1042,35 @@ def simulate_and_plot_epsilon_decay(epsilon_start, epsilon_min, epsilon_decay_ra
     epsilon_values_estimate = []
     epsilon = epsilon_start
     min_epsilon_reached_at = 0
+    percentage_min = 85
+    target_timesteps = total_timesteps_estimate * (percentage_min / 100)
+    decay_rate = -np.log(epsilon_min / epsilon_start) / target_timesteps
+    decay_rate_linear = (epsilon_start - epsilon_min) / target_timesteps
+
+    
 
     for t in range(int(total_timesteps_estimate)):
-        if EPSILON_TYPE == "exponential":
-            epsilon = max(epsilon_min, epsilon * (1 - epsilon_decay_rate))
-        elif EPSILON_TYPE == "linear":
-            epsilon = max(epsilon_min, epsilon - epsilon_decay_rate)
+        if t <= int(total_timesteps_estimate/2):
+            if EPSILON_TYPE == "exponential3":
+                epsilon = max(epsilon_min, epsilon * (1 - decay_rate_linear))
+            elif EPSILON_TYPE == "exponential2":
+                # Calculate the timesteps at which epsilon should reach epsilon_min
+                epsilon = max(epsilon_min, epsilon * (1 - decay_rate))
+
+        if t > int(total_timesteps_estimate/2):
+            if EPSILON_TYPE == "exponential":
+                epsilon = max(epsilon_min, epsilon * (1 - epsilon_decay_rate))
+            elif EPSILON_TYPE == "linear":
+                epsilon = max(epsilon_min, epsilon - epsilon_decay_rate)
+            elif EPSILON_TYPE == "exponential2":
+                # Calculate the timesteps at which epsilon should reach epsilon_min
+                epsilon = max(epsilon_min, epsilon * (1 - decay_rate))
+            elif EPSILON_TYPE == "exponential3":
+                # Calculate the timesteps at which epsilon should reach epsilon_min
+                epsilon = max(epsilon_min, epsilon * (1 - decay_rate))
         epsilon_values_estimate.append(epsilon)
+
+    
 
         # Record when epsilon reaches the minimum value
         if epsilon == epsilon_min:
@@ -1061,4 +1089,11 @@ def simulate_and_plot_epsilon_decay(epsilon_start, epsilon_min, epsilon_decay_ra
     plt.xlabel('Timesteps')
     plt.ylabel('Epsilon Value')
     plt.title('Estimated Epsilon Decay over Timesteps')
+    plt.grid(True)
     plt.show()
+
+
+if __name__ == "__main__":
+    simulate_and_plot_epsilon_decay(1, 0.15, 0.00001, 1000000, "exponential2")
+    # simulate_and_plot_epsilon_decay(1, 0.025, 0.00001, 1000000, "exponential2")
+    simulate_and_plot_epsilon_decay(1, 0.025, 0.00001, 1000000, "exponential3")

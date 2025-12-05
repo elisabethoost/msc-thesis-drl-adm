@@ -1637,12 +1637,9 @@ class AircraftDisruptionEnv(gym.Env):
             print(f"  [Penalty #2: {status}] -{cancel_penalty} penalty for {cancellation_penalty_count} new cancelled flights: {new_cancellations}")
 
         # 3. Inaction Penalty: Penalize doing nothing when conflicts exist
-        # Only penalize inaction (0,0) if conflicts remain - if no conflicts remain,
-        # the environment is just waiting for probabilities to resolve, which is fine
         if PENALTY_3_INACTION_ENABLED:
-            # Only penalize if: action is (0,0) AND conflicts still remain
-            # Using 'remaining_conflicts' directly (set is falsy when empty, truthy when non-empty)
             inaction_penalty = NO_ACTION_PENALTY if (flight_action == 0 and remaining_conflicts) else 0
+            inaction_penalty = NO_ACTION_PENALTY/2 if (flight_action == 0 and not remaining_conflicts) else 0
             if inaction_penalty > 0:
                 self.scenario_wide_inaction_count += 1  # Track inaction occurrences
         else:
@@ -1676,11 +1673,7 @@ class AircraftDisruptionEnv(gym.Env):
                 print(f"  [Penalty #4: {status}] -{proactive_penalty} penalty for last-minute action ({time_to_departure:.1f} minutes before departure)")
 
         # 5. Time Penalty: Small penalty per timestep to encourage faster resolution
-        # Only apply if conflicts remain - if no conflicts remain, the environment is just
-        # waiting for probabilities to resolve to 1.0 or 0.0, which is fine
         if PENALTY_5_TIME_ENABLED:
-            # Only penalize time if conflicts still remain
-            # Using 'remaining_conflicts' directly (set is falsy when empty, truthy when non-empty)
             if remaining_conflicts:
                 time_penalty = TIMESTEP_HOURS * 60 * TIME_MINUTE_PENALTY  # Penalty per timestep
             else:
@@ -1717,8 +1710,7 @@ class AircraftDisruptionEnv(gym.Env):
             status = "ENABLED" if PENALTY_7_AUTO_CANCELLATION_ENABLED else "DISABLED"
             print(f"  [Penalty #7: {status}] -{automatic_cancellation_penalty} penalty for {automatic_cancellation_penalty_count} automatic cancellations")
 
-        # 6. Episode-End Penalty: Penalize unresolved conflicts at scenario end (NEGATIVE-ONLY STRUCTURE)
-        # For each initial conflict, check if it was properly resolved (prob=1.00, not cancelled)
+        # 6. Episode-End Penalty:for each initial conflict, check if it was properly resolved (prob=1.00, not cancelled)
         # If NOT properly resolved, apply penalty
         unresolved_conflict_penalty = 0
         scenario_ended_flag = False  # Track if scenario actually ended (for step_info)
@@ -1838,18 +1830,6 @@ class AircraftDisruptionEnv(gym.Env):
                 print(f"  [Penalty #9: {status}] -{low_confidence_action_penalty} penalty for acting on low-confidence disruption (prob={self.last_action_probability:.2f} < {LOW_CONFIDENCE_ACTION_THRESHOLD}) without resolving conflicts")
 
 
-        # # 10. Action taking bonus: Reward for taking any action that changes state: encourages exploration and makes actions less scary than inaction
-        # # Helps agent learn that taking actions is better than doing nothing
-        # action_taking_bonus = 0.0
-        # if flight_action != 0 and self.something_happened:
-        #     action_taking_bonus = 0  # Small reward for taking action that changes state
-
-        # if DEBUG_MODE_REWARD and action_taking_bonus > 0:
-        #     print(f"  [Reward #11] +{action_taking_bonus} bonus for taking action that changed state (encourages exploration)")
-
-        
-        # Track inefficient tail swaps (tail swaps that didn't resolve conflicts)
-        # This handles cases where tail_swap_happened but wasn't counted in reward #8
         if self.tail_swap_happened and not tail_swap_resolved_conflict:
             self.scenario_wide_tail_swaps_inefficient += 1
         

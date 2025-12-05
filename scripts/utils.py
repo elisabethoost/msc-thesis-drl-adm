@@ -678,6 +678,10 @@ def calculate_epsilon_decay_rate(total_timesteps, epsilon_start, epsilon_min, pe
         decay_rate = -np.log(epsilon_min / epsilon_start) / target_timesteps
     elif EPSILON_TYPE == "linear":
         decay_rate = (epsilon_start - epsilon_min) / target_timesteps
+    elif EPSILON_TYPE == "mixed":
+        decay_rate = -np.log(epsilon_min / epsilon_start) / target_timesteps
+        decay_rate_linear = (epsilon_start - epsilon_min) / target_timesteps
+        return decay_rate, decay_rate_linear
 
     print(f"Calculated EPSILON_DECAY_RATE: {decay_rate}")
     return decay_rate
