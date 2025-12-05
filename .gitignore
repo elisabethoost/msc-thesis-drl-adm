@@ -11,6 +11,14 @@ data/Testing*/
 data/RESULTS*/
 data/REVERSED*/
 
+# Ignore all Data/TRAINING folders by default
+Data/TRAINING/*
+# But allow specific folders
+!Data/TRAINING/3ac-130-green/
+!Data/TRAINING/3ac-130-green/**
+!Data/TRAINING/3ac-182-green16/
+!Data/TRAINING/3ac-182-green16/**
+
 # add the action sequences folder
 results/*/action_sequences/
 data/temp/
@@ -29,20 +37,7 @@ results/*/plots/reward-plots-per-scenario/
 !/results/ppo/_*
 !/results/dqn/_*
 
-# Ignore all files in the trained_models directory
-# /trained_models/dqn/*
-/trained_models/a2c/*
-/trained_models/ppo/*
 
-# Except do not ignore the trained_models directory itself
-!/trained_models/dqn/
-!/trained_models/a2c/
-!/trained_models/ppo/
-
-# Do not ignore files that start with an underscore in the trained_models directory
-!/trained_models/dqn/_*
-!/trained_models/a2c/_*
-!/trained_models/ppo/_*logs/training/training_0238.json
 
 
 logs/training/*
@@ -60,6 +55,8 @@ Save_Trained_Models*/
 # Ignore all ORIG_Trained_Models directories
 ORIG_Trained_Models*/
 Final_Model_*/
+Final_SSFModel_1/
+analyze_random_episode_negative_rewards.py
 
 # Ignore specific analysis files
 ANALYSIS_GUIDE.md
