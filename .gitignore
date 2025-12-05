@@ -52,14 +52,24 @@ Data Template/
 # Results - Ignore all file contents but keep directory structure
 # This pattern ignores all files in results and subdirectories
 results/**/*
+# Un-ignore parent directories first (needed for sub-patterns to work)
+!results/
+!results/model1_rf/
+!results/model1_rf/training/
+!results/model1_rf/inference/
+!results/model1_rf/analysis/
+!results/model2_ssf/
+!results/model2_ssf/training/
+!results/model2_ssf/inference/
+!results/model2_ssf/analysis/
+!results/model3_ssf_large/
+!results/model3_ssf_large/training/
+!results/model3_ssf_large/inference/
+!results/model3_ssf_large/analysis/
 # Un-ignore .gitkeep files to allow tracking directory structure
 !results/**/.gitkeep
 # Un-ignore Model 3's m3_2 training results (track all contents)
-# Un-ignore parent directories (as directories, not their file contents)
-!results/model3_ssf_large/
-!results/model3_ssf_large/training/
 !results/model3_ssf_large/training/m3_2/
-# Now un-ignore all files in m3_2
 !results/model3_ssf_large/training/m3_2/**
 
 # Logs
