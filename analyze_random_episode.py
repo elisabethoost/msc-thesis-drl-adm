@@ -6,7 +6,7 @@ Usage:
     python analyze_random_episode.py
     
     # Analyze a random episode/scenario from a specific file
-    python analyze_random_episode.py Final_Model_4/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl
+    python analyze_random_episode.py Final_Model_17_wPenalty10/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl
     
     # Analyze a specific episode (random scenario)
     python analyze_random_episode.py Save_Trained_Models38/3ac-130-green/detailed_episodes/proactive_detailed_episodes_seed_232323.pkl 46

@@ -3,9 +3,9 @@ import os
 import time
 import subprocess
 import sys
-import src.config_rf as config
+import src.config_ssf as config
 import pandas as pd
-from train_dqn_modular import run_train_dqn_both_timesteps
+from train_dqn_modular_ssf import run_train_dqn_both_timesteps
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -329,11 +329,11 @@ def save_experiment_parameters(save_results_big_run, MAX_TOTAL_TIMESTEPS):
     from datetime import datetime
     import importlib.util
     
-    # Dynamically read training parameters from train_dqn_modular.py
+    # Dynamically read training parameters from train_dqn_modular_ssf.py
     training_params = {}
     try:
         # Read the file and extract parameter values using regex
-        with open('train_dqn_modular.py', 'r') as f:
+        with open('train_dqn_modular_ssf.py', 'r') as f:
             content = f.read()
         
         # Extract training parameters using regex patterns
@@ -413,10 +413,10 @@ def save_experiment_parameters(save_results_big_run, MAX_TOTAL_TIMESTEPS):
         training_params = {}
         stability_params = {}
     
-    # Dynamically read reward parameters from config_rf.py
+    # Dynamically read reward parameters from config_ssf.py
     reward_params = {}
     try:
-        with open('src/config_rf.py', 'r') as f:
+        with open('src/config_ssf.py', 'r') as f:
             content = f.read()
         
         reward_patterns = {
@@ -501,21 +501,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(1e5)  # 0.03e5 = 3000 timesteps for proper convergence (increased from 200k)
-    # SEEDS = [232323, 242424]
-    SEEDS = [232323]
+    MAX_TOTAL_TIMESTEPS = int(0.1e5)  #5e5 = 500000 timesteps for proper convergence (increased from 200k)
+    SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
     save_training_monitor = False  # Set to True to save training monitor checkpoints and logs (saves ~28GB per run)
-    save_folder = "Final_Model_20_wPenalty10"
+    save_folder = "Final_SSFModel_1"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
-    # env_types = ['myopic', 'proactive', 'reactive']
-    env_types = ['proactive']  # Test only proactive environment
+    env_types = ['myopic', 'proactive', 'reactive']
+    # env_types = ['proactive']  # Test only proactive environment
 
     print(f"Temporal features enabled: {config.ENABLE_TEMPORAL_DERIVED_FEATURES} | "
           f"Derived features/aircraft: {config.DERIVED_FEATURES_PER_AIRCRAFT} | "
@@ -526,8 +525,6 @@ if __name__ == "__main__":
 
     all_folders_temp = [
         "Data/TRAINING/3ac-130-green/"
-        # "Data/TRAINING/3ac-182-green16/"
-        # "Data/TRAINING/3ac-13-green16/"	
         # "Data/TRAINING/3ac-520-blue/"	
         # "Data/TRAINING/3ac-702-train/"
         #"Data/TRAINING/6ac-26-lilac/"

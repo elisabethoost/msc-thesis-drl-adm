@@ -150,25 +150,16 @@ class AircraftDisruptionEnv(gym.Env):
         self.eligible_flights_for_resolved_bonus = self.get_initial_conflicts()
         self.eligible_flights_for_not_being_cancelled_when_disruption_happens = self.get_initial_conflicts_with_deptime_before_unavail_start()
 
-        # Scenario-wide tracking metrics for analysis
-        self.scenario_wide_delay_minutes = 0                    # Total delay in minutes
-        self.scenario_wide_delay_count = 0                      # Number of flights delayed
-        self.scenario_wide_cancelled_flights = 0                # Number of manually cancelled flights
-        self.scenario_wide_automatically_cancelled_count = 0    # Number of automatically cancelled flights
-        self.scenario_wide_steps = 0                            # Total steps taken
-        self.scenario_wide_resolved_initial_conflicts = 0       # Conflicts resolved at end
-        self.scenario_wide_disruption_resolved_to_zero_count = 0
-        self.scenario_wide_solution_slack = 0                   # Solution quality metric
-        self.scenario_wide_tail_swaps = 0                       # Total tail swaps
-        self.scenario_wide_tail_swaps_resolving = 0             # Tail swaps that resolved conflicts (got reward #8)
-        self.scenario_wide_tail_swaps_inefficient = 0           # Tail swaps that didn't resolve conflicts
-        self.scenario_wide_inaction_count = 0                   # Count of (0,0) actions
-        if DEBUG_MODE_REWARD:
-            print(f"[{self.env_type} environment initialized]")
-            print(f"scenario wide initial disrupted flights length:")
-        
+        self.scenario_wide_delay_minutes = 0
+        self.scenario_wide_cancelled_flights = 0
+        self.scenario_wide_steps = 0
+        self.scenario_wide_resolved_conflicts = 0
+        self.scenario_wide_solution_slack = 0
+        self.scenario_wide_tail_swaps = 0
         self.scenario_wide_initial_disrupted_flights_list = self.get_current_conflicts()
         self.scenario_wide_actual_disrupted_flights = len(self.get_current_conflicts())
+        # print(f"*********scenario_wide_actual_disrupted_flights: {self.scenario_wide_actual_disrupted_flights}")
+        # print(f"*********scenario_wide_initial_disrupted_flights_list: {self.scenario_wide_initial_disrupted_flights_list}")
 
         self.scenario_wide_reward_components = {
             "delay_penalty_total": 0,
@@ -176,10 +167,11 @@ class AircraftDisruptionEnv(gym.Env):
             "inaction_penalty": 0,
             "proactive_penalty": 0,
             "time_penalty": 0,
-            "unresolved_conflict_penalty": 0,
+            "final_conflict_resolution_reward": 0,
             "automatic_cancellation_penalty": 0,
             "probability_resolution_bonus": 0,
             "low_confidence_action_penalty": 0,
+            "non_action_penalty": 0,
             "action_taking_bonus": 0
         }
  
@@ -321,12 +313,25 @@ class AircraftDisruptionEnv(gym.Env):
             flight_times.sort(key=lambda x: x[1])
 
             # Store flight information starting from column 4
+            # CRITICAL: Add conflict indicator (0 or 1) for each flight to make credit assignment easier
+            # This explicitly marks which flights are in conflict, so agent can learn: "conflict=1 → move flight → conflict=0 → reward"
             for i, (flight_id, dep_time, arr_time) in enumerate(flight_times):
-                col_start = 4 + (i * 3)
-                if col_start + 2 < self.columns_state_space:
+                col_start = 4 + (i * 4)  # Changed from 3 to 4 to accommodate conflict flag
+                if col_start + 3 < self.columns_state_space:
                     state[idx + 1, col_start] = flight_id
                     state[idx + 1, col_start + 1] = dep_time
                     state[idx + 1, col_start + 2] = arr_time
+                    
+                    # Calculate if this flight is in conflict with the unavailability
+                    conflict_flag = 0.0
+                    if (not np.isnan(breakdown_probability) and breakdown_probability > 0.0 and
+                        not np.isnan(unavail_start_minutes) and not np.isnan(unavail_end_minutes) and
+                        not np.isnan(dep_time) and not np.isnan(arr_time)):
+                        # Check for overlap: flight overlaps if dep < unavail_end and arr > unavail_start
+                        if dep_time < unavail_end_minutes and arr_time > unavail_start_minutes:
+                            conflict_flag = 1.0
+                    
+                    state[idx + 1, col_start + 3] = conflict_flag  # Explicit conflict indicator
 
         # Update flight_id_to_idx with only the active flights
         self.flight_id_to_idx = {
@@ -338,6 +343,44 @@ class AircraftDisruptionEnv(gym.Env):
             self.remove_flight(flight_id)
 
         return state
+
+    def _update_conflict_flag(self, state, row_idx, col_start):
+        """Updates the conflict flag for a flight at the given position in the state.
+        
+        This helper function recalculates the conflict flag when flight times are updated,
+        ensuring the conflict indicator stays accurate after actions.
+        
+        Args:
+            state: The state matrix to update
+            row_idx: Row index (aircraft row, 1-based: row 0 is time info, row 1+ are aircraft)
+            col_start: Column index where the flight_id is stored (first of 4 columns: id, dep, arr, conflict)
+        """
+        if row_idx < 1 or row_idx >= self.rows_state_space:
+            return
+        
+        flight_id = state[row_idx, col_start]
+        
+        if np.isnan(flight_id):
+            return
+        
+        # Get unavailability info from state
+        breakdown_probability = state[row_idx, 1]
+        unavail_start_minutes = state[row_idx, 2]
+        unavail_end_minutes = state[row_idx, 3]
+        dep_time = state[row_idx, col_start + 1]
+        arr_time = state[row_idx, col_start + 2]
+        
+        # Calculate conflict flag
+        conflict_flag = 0.0
+        if (not np.isnan(breakdown_probability) and breakdown_probability > 0.0 and
+            not np.isnan(unavail_start_minutes) and not np.isnan(unavail_end_minutes) and
+            not np.isnan(dep_time) and not np.isnan(arr_time)):
+            # Check for overlap: flight overlaps if dep < unavail_end and arr > unavail_start
+            if dep_time < unavail_end_minutes and arr_time > unavail_start_minutes:
+                conflict_flag = 1.0
+        
+        # Update the conflict flag in the state (4th column: col_start + 3)
+        state[row_idx, col_start + 3] = conflict_flag
 
     def process_observation(self, state):
         """Processes the observation by applying env_type-specific masking.
@@ -458,9 +501,12 @@ class AircraftDisruptionEnv(gym.Env):
                 aircraft_id = self.aircraft_ids[i - 1]
                 if aircraft_id in self.unavailabilities_dict:
                     self.unavailabilities_dict[aircraft_id]['EndTime'] = state[i, 3]
-            for j in range(4, self.columns_state_space - 2, 3):
+            # UPDATED: Step size changed from 3 to 4 to account for conflict flag (id, dep, arr, conflict)
+            for j in range(4, self.columns_state_space - 3, 4):
                 if not np.isnan(state[i, j + 1]) and not np.isnan(state[i, j + 2]) and state[i, j + 1] > state[i, j + 2]:
                     state[i, j + 2] += 1440
+                    # Recalculate conflict flag after fixing time
+                    self._update_conflict_flag(state, i, j)
 
     def remove_flight(self, flight_id):
         """Removes the specified flight from the dictionaries. Adds it to the cancelled_flights set."""
@@ -568,7 +614,7 @@ class AircraftDisruptionEnv(gym.Env):
                     "automatic_cancellation_penalty": 0,
                     "proactive_penalty": 0,
                     "time_penalty": 0,
-                    "unresolved_conflict_penalty": 0
+                    "final_conflict_resolution_reward": 0
                 },
                 "penalty_flags": {
                     "penalty_1_delay_enabled": PENALTY_1_DELAY_ENABLED,
@@ -607,10 +653,7 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Get pre-action conflicts
         # Gets probabilities ac unavailitbilities that have not yet been resolved (they are neither 1 or 0 but 0<p<1)
-        if DEBUG_MODE_REWARD:
-            print(f"pre action conflicts are:")
         pre_action_conflicts = self.get_current_conflicts()
-        
         # Keep track of which flights were actually in conflict before the action
         self.pre_action_conflict_flights = set()
         for conflict in pre_action_conflicts:
@@ -632,36 +675,18 @@ class AircraftDisruptionEnv(gym.Env):
         if len(pre_action_conflicts) == 0 and len(unresolved_uncertainties) == 0:
             # Handle the case when there are no conflicts
             # print("-----2-----")
-            processed_state, reward, terminated, truncated, info, stop_scenario = self.handle_no_conflicts(flight_action, aircraft_action)
+            processed_state, reward, terminated, truncated, info = self.handle_no_conflicts(flight_action, aircraft_action)
         else:
             # print("-----3-----")
             # Resolve the conflict based on the action
-            processed_state, reward, terminated, truncated, info, stop_scenario = self.handle_flight_operations(flight_action, aircraft_action, pre_action_conflicts)
+            processed_state, reward, terminated, truncated, info = self.handle_flight_operations(flight_action, aircraft_action, pre_action_conflicts)
 
         # Update the processed state after processing uncertainties
         processed_state, _ = self.process_observation(self.state)
 
-        # Determine termination based on two conditions:
-        # 1. Time limit reached → terminate regardless of conflict status
-        # 2. No overlaps remain AND all probabilities resolved → terminate (successful completion)
-        time_limit_reached = self.current_datetime >= self.end_datetime
-        criteria_met = self.check_termination_criteria()
-        
-        if time_limit_reached:
-            terminated = True  # Time's up - end scenario regardless of conflicts
-        elif criteria_met:
-            terminated = True  # Successfully completed - all resolved
-        else:
-            terminated = False  # Keep going - either conflicts remain or probabilities uncertain
-        
-        if DEBUG_MODE_STOPPING_CRITERIA and terminated:            
-            # Debug: Show termination status details
-            if stop_scenario or time_limit_reached or criteria_met:
-                print(f"  [TERMINATION STATUS]")
-                print(f"    - stop_scenario: {stop_scenario}")
-                print(f"    - time_limit_reached: scenario ended because time limit reached {time_limit_reached}")
-                print(f"    - check_termination_criteria(): {criteria_met}")
-                print(f"    - final terminated: {terminated}")
+        terminated = self.check_termination_criteria()
+        if DEBUG_MODE_STOPPING_CRITERIA:
+            print(f"checked and terminated: {terminated}")
 
         # Merge info_after_step into info dict to pass penalty details through
         if info is None:
@@ -880,7 +905,9 @@ class AircraftDisruptionEnv(gym.Env):
         This function updates the current datetime, checks if the episode is terminated,
         updates the state, and returns the appropriate outputs.
         """
+        # print("*** HANDLING NO CONFLICTS")
 
+        # store the departure time of the flight that is being acted upon (before the action is taken)
         if flight_action != 0:
             original_flight_action_departure_time = self.flights_dict[flight_action]['DepTime']
         else:
@@ -891,28 +918,37 @@ class AircraftDisruptionEnv(gym.Env):
             terminated, reason = self._is_done()
             if terminated:
                 if DEBUG_MODE_STOPPING_CRITERIA:
-                    print(f"Scenario ended: {reason}")
+                    print(f"Episode ended: {reason}")
                 processed_state, _ = self.process_observation(self.state)
                 truncated = False
+                # print("*** 1")
                 reward = self._calculate_reward(set(), set(), flight_action, aircraft_action, original_flight_action_departure_time, terminated)
+                # print("*** doing this")
                 return processed_state, reward, terminated, truncated, {}
 
         self.current_datetime = next_datetime
         self.state = self._get_initial_state()
         
-        stop_scenario, reason = self.end_of_recovery_period_reached()
+
+
+        # Since there are no conflicts, return the new state with zero reward
         terminated, reason = self._is_done()
         truncated = False
+
+        # Call _calculate_reward even when there are no conflicts
         done = terminated or truncated
+        
+        # print("*** 2")
         reward = self._calculate_reward(set(), set(), flight_action, aircraft_action, original_flight_action_departure_time, done)
+
 
         processed_state, _ = self.process_observation(self.state)
 
         if terminated:
             if DEBUG_MODE_STOPPING_CRITERIA:
-                print(f"Scenario ended: {reason}")
+                print(f"Episode ended: {reason}")
 
-        return processed_state, reward, terminated, truncated, {}, stop_scenario
+        return processed_state, reward, terminated, truncated, {}
 
 
     def handle_flight_operations(self, flight_action, aircraft_action, pre_action_conflicts):
@@ -958,16 +994,9 @@ class AircraftDisruptionEnv(gym.Env):
             self.current_datetime = next_datetime
             self.state = self._get_initial_state()
 
-            if DEBUG_MODE_REWARD:
-                print(f"")
-                print(f"post action conflicts (flight action = 0):")
-                
             post_action_conflicts = self.get_current_conflicts()
-            
-
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
-            
-            stop_scenario, reason = self.end_of_recovery_period_reached()
+
             terminated, reason = self._is_done()
             truncated = False
             done = terminated or truncated
@@ -979,7 +1008,7 @@ class AircraftDisruptionEnv(gym.Env):
                     print(f"Episode ended: {reason}")
 
             processed_state, _ = self.process_observation(self.state)
-            return processed_state, reward, terminated, truncated, {}, stop_scenario
+            return processed_state, reward, terminated, truncated, {}
         elif aircraft_action == 0:
             # Cancel the flight
             self.cancel_flight(flight_action)
@@ -991,12 +1020,9 @@ class AircraftDisruptionEnv(gym.Env):
             self.current_datetime = next_datetime
             self.state = self._get_initial_state()
 
-            if DEBUG_MODE_REWARD:
-                print(f"post action conflicts (aircraft action = 0): ")
             post_action_conflicts = self.get_current_conflicts()
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
 
-            stop_scenario, reason = self.end_of_recovery_period_reached()
             terminated, reason = self._is_done()
             truncated = False
             done = terminated or truncated
@@ -1008,7 +1034,7 @@ class AircraftDisruptionEnv(gym.Env):
                     print(f"Episode ended: {reason}")
 
             processed_state, _ = self.process_observation(self.state)
-            return processed_state, reward, terminated, truncated, {}, stop_scenario
+            return processed_state, reward, terminated, truncated, {}
         else:
             # Reschedule the flight to the selected aircraft
             selected_flight_id = flight_action
@@ -1024,7 +1050,6 @@ class AircraftDisruptionEnv(gym.Env):
                 self.current_datetime = next_datetime
                 self.state = self._get_initial_state()
                 
-                stop_scenario, reason = self.end_of_recovery_period_reached()
                 terminated, reason = self._is_done()
                 truncated = False
 
@@ -1033,7 +1058,7 @@ class AircraftDisruptionEnv(gym.Env):
                 reward = self._calculate_reward(pre_action_conflicts, pre_action_conflicts, flight_action, aircraft_action, original_flight_action_departure_time, done)
 
                 processed_state, _ = self.process_observation(self.state)
-                return processed_state, reward, terminated, truncated, {}, stop_scenario
+                return processed_state, reward, terminated, truncated, {}
 
             current_aircraft_id = self.rotations_dict[selected_flight_id]['Aircraft']
 
@@ -1069,11 +1094,13 @@ class AircraftDisruptionEnv(gym.Env):
 
                 # Remove flight from current aircraft's schedule
                 current_aircraft_idx = self.aircraft_id_to_idx[current_aircraft_id] + 1
-                for j in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for j in range(4, self.columns_state_space - 3, 4):
                     if self.state[current_aircraft_idx, j] == selected_flight_id:
                         self.state[current_aircraft_idx, j] = np.nan
                         self.state[current_aircraft_idx, j + 1] = np.nan
                         self.state[current_aircraft_idx, j + 2] = np.nan
+                        self.state[current_aircraft_idx, j + 3] = np.nan  # Clear conflict flag
                         break
 
                 # Schedule flight on new aircraft
@@ -1093,17 +1120,17 @@ class AircraftDisruptionEnv(gym.Env):
             self.current_datetime = next_datetime
             self.state = self._get_initial_state()
 
-            if DEBUG_MODE_REWARD:
-                print(f"post action conflicts (swap flight):")
             post_action_conflicts = self.get_current_conflicts()
             
             resolved_conflicts = pre_action_conflicts - post_action_conflicts
 
-            stop_scenario, reason = self.end_of_recovery_period_reached()
             terminated, reason = self._is_done()
             terminated = self.check_termination_criteria()
             truncated = False
             done = terminated or truncated
+            # print("*** done = ", done)
+            # print("*** terminated = ", terminated)
+            # print("*** 6")
             reward = self._calculate_reward(resolved_conflicts, post_action_conflicts, flight_action, aircraft_action, original_flight_action_departure_time, terminated=done)
 
             if terminated:
@@ -1113,7 +1140,7 @@ class AircraftDisruptionEnv(gym.Env):
 
             processed_state, _ = self.process_observation(self.state)
             # print("*** returning: ", processed_state, reward, terminated, truncated, {})
-            return processed_state, reward, terminated, truncated, {}, stop_scenario
+            return processed_state, reward, terminated, truncated, {}
 
     def schedule_flight_on_aircraft(self, aircraft_id, flight_id, dep_time, current_aircraft_id, arr_time=None, delayed_flights=None, secondary=False):
         """Schedules a flight on an aircraft.
@@ -1262,7 +1289,7 @@ class AircraftDisruptionEnv(gym.Env):
                     # Sanity check: delay should be reasonable (not more than a few days) LOLL
                     max_reasonable_delay_minutes = 1 * 24 * 60  # 7 days
                     if delay > max_reasonable_delay_minutes:
-                        if DEBUG_MODE_SCHEDULING:
+                        if DEBUG_MODE_SCHEDULING or DEBUG_MODE_REWARD:
                             print(f"  WARNING: Delay ({delay:.1f} minutes = {delay/60:.1f} hours) is unreasonably large for flight {flight_id}!")
                             print(f"    original_dep_minutes: {original_dep_minutes:.1f}")
                             print(f"    dep_time: {dep_time:.1f}")
@@ -1282,7 +1309,8 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Get all flights on this aircraft sorted by departure time
         scheduled_flights = []
-        for j in range(4, self.columns_state_space - 2, 3):
+        # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+        for j in range(4, self.columns_state_space - 3, 4):
             existing_flight_id = self.state[aircraft_idx, j]
             existing_dep_time = self.state[aircraft_idx, j + 1]
             existing_arr_time = self.state[aircraft_idx, j + 2]
@@ -1323,16 +1351,21 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Finally, update the state for our flight
         flight_placed = False
-        for j in range(4, self.columns_state_space - 2, 3):
+        # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+        for j in range(4, self.columns_state_space - 3, 4):
             if self.state[aircraft_idx, j] == flight_id:
                 self.state[aircraft_idx, j + 1] = dep_time
                 self.state[aircraft_idx, j + 2] = arr_time
+                # Update conflict flag after updating flight times
+                self._update_conflict_flag(self.state, aircraft_idx, j)
                 flight_placed = True
                 break
             elif np.isnan(self.state[aircraft_idx, j]) and not flight_placed:
                 self.state[aircraft_idx, j] = flight_id
                 self.state[aircraft_idx, j + 1] = dep_time
                 self.state[aircraft_idx, j + 2] = arr_time
+                # Calculate and set conflict flag for new flight
+                self._update_conflict_flag(self.state, aircraft_idx, j)
                 flight_placed = True
                 break
 
@@ -1426,10 +1459,13 @@ class AircraftDisruptionEnv(gym.Env):
                 scheduled_flights[i] = (flight_id, new_dep_time, new_arr_time)
                 
                 # Update the flight times in the state
-                for k in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for k in range(4, self.columns_state_space - 3, 4):
                     if self.state[aircraft_idx, k] == flight_id:
                         self.state[aircraft_idx, k + 1] = new_dep_time
                         self.state[aircraft_idx, k + 2] = new_arr_time
+                        # Update conflict flag after updating flight times
+                        self._update_conflict_flag(self.state, aircraft_idx, k)
                         break
                 
                 # Update the flights_dict
@@ -1446,7 +1482,7 @@ class AircraftDisruptionEnv(gym.Env):
                 # Sanity check: delay should be reasonable (not more than a few days) LOLL
                 max_reasonable_delay_minutes = 1 * 24 * 60  # 7 days
                 if delay > max_reasonable_delay_minutes:
-                    if DEBUG_MODE_SCHEDULING:
+                    if DEBUG_MODE_SCHEDULING or DEBUG_MODE_REWARD:
                         print(f"  WARNING: Delay ({delay:.1f} minutes = {delay/60:.1f} hours) is unreasonably large!")
                         print(f"    flight_id: {flight_id}")
                         print(f"    original_dep_minutes: {original_dep_minutes:.1f}")
@@ -1484,13 +1520,15 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Remove the flight from the state
         for idx in range(1, self.rows_state_space):
-            for j in range(4, self.columns_state_space - 2, 3):
+            # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+            for j in range(4, self.columns_state_space - 3, 4):
                 existing_flight_id = self.state[idx, j]
                 if existing_flight_id == flight_id:
                     # Remove flight from state
                     self.state[idx, j] = np.nan
                     self.state[idx, j + 1] = np.nan
                     self.state[idx, j + 2] = np.nan
+                    self.state[idx, j + 3] = np.nan  # Clear conflict flag
 
         self.something_happened = True
 
@@ -1590,15 +1628,7 @@ class AircraftDisruptionEnv(gym.Env):
             self.environment_delayed_flights[flight_id] - self.penalized_delays.get(flight_id, 0)
             for flight_id in self.environment_delayed_flights
         )
-        
-        # Track number of NEW delays (not cumulative delay minutes)
-        new_delayed_flights = len([
-            flight_id for flight_id in self.environment_delayed_flights
-            if flight_id not in self.penalized_delays or self.environment_delayed_flights[flight_id] > self.penalized_delays.get(flight_id, 0)
-        ])
-        
         self.scenario_wide_delay_minutes += delay_penalty_minutes
-        self.scenario_wide_delay_count += new_delayed_flights  # Track count of delayed flights
         
         if PENALTY_1_DELAY_ENABLED:
             # Only penalize delays exceeding the threshold (e.g., >3 hours)
@@ -1643,8 +1673,6 @@ class AircraftDisruptionEnv(gym.Env):
             # Only penalize if: action is (0,0) AND conflicts still remain
             # Using 'remaining_conflicts' directly (set is falsy when empty, truthy when non-empty)
             inaction_penalty = NO_ACTION_PENALTY if (flight_action == 0 and remaining_conflicts) else 0
-            if inaction_penalty > 0:
-                self.scenario_wide_inaction_count += 1  # Track inaction occurrences
         else:
             inaction_penalty = 0
 
@@ -1699,6 +1727,34 @@ class AircraftDisruptionEnv(gym.Env):
             else:
                 print(f"  [Penalty #5: {status}] Time penalty disabled")
 
+        # 6. Final Resolution Reward: Bonus for resolving real conflicts at scenario end
+        final_conflict_resolution_reward = 0
+        scenario_ended_flag = False  # Track if scenario actually ended (for step_info)
+        if PENALTY_6_FINAL_REWARD_ENABLED and terminated:
+            # Count resolved conflicts for non-cancelled flights (manual or automatic) with probability 1.00
+            scenario_ended = self.check_termination_criteria()
+            if scenario_ended:
+                scenario_ended_flag = True  # Mark that scenario ended and final reward was calculated
+                final_resolved_count = 0
+                resolved_flights = []
+                for (aircraft_id, flight_id) in self.initial_conflict_combinations:
+                    if self.unavailabilities_dict[aircraft_id]['Probability'] == 1.00 and flight_id not in self.cancelled_flights and flight_id not in self.automatically_cancelled_flights:
+                        final_resolved_count += 1
+                        resolved_flights.append(flight_id)
+
+                final_conflict_resolution_reward = final_resolved_count * RESOLVED_CONFLICT_REWARD
+                self.scenario_wide_resolved_conflicts += final_resolved_count
+
+                # Calculate scenario-wide solution slack
+                self._calculate_scenario_wide_solution_slack()
+                
+                if DEBUG_MODE_REWARD:
+                    status = "ENABLED" if PENALTY_6_FINAL_REWARD_ENABLED else "DISABLED"
+                    print(f"  [Penalty #6: {status}] +{final_conflict_resolution_reward} final reward for resolving {final_resolved_count} real (non-cancelled, non-auto-cancelled) conflicts at scenario end: {resolved_flights}")
+            elif DEBUG_MODE_REWARD:
+                print(f"  [Penalty #6] Final reward NOT given because scenario_ended=False (termination criteria not met)")
+
+
         # 7. Automatic cancellation of flights that have already departed
         if PENALTY_7_AUTO_CANCELLATION_ENABLED:
             new_automatic_cancellations = {
@@ -1707,7 +1763,7 @@ class AircraftDisruptionEnv(gym.Env):
             automatic_cancellation_penalty_count = len(new_automatic_cancellations)
             automatic_cancellation_penalty = automatic_cancellation_penalty_count * AUTOMATIC_CANCELLATION_PENALTY
             
-            self.scenario_wide_automatically_cancelled_count += automatic_cancellation_penalty_count  # Track auto-cancellations separately
+            self.scenario_wide_cancelled_flights += automatic_cancellation_penalty_count
             self.penalized_automatically_cancelled_flights.update(new_automatic_cancellations)
         else:
             automatic_cancellation_penalty = 0
@@ -1716,61 +1772,11 @@ class AircraftDisruptionEnv(gym.Env):
         if DEBUG_MODE_REWARD and automatic_cancellation_penalty_count > 0:
             status = "ENABLED" if PENALTY_7_AUTO_CANCELLATION_ENABLED else "DISABLED"
             print(f"  [Penalty #7: {status}] -{automatic_cancellation_penalty} penalty for {automatic_cancellation_penalty_count} automatic cancellations")
-
-        # 6. Episode-End Penalty: Penalize unresolved conflicts at scenario end (NEGATIVE-ONLY STRUCTURE)
-        # For each initial conflict, check if it was properly resolved (prob=1.00, not cancelled)
-        # If NOT properly resolved, apply penalty
-        unresolved_conflict_penalty = 0
-        scenario_ended_flag = False  # Track if scenario actually ended (for step_info)
-        if PENALTY_6_FINAL_REWARD_ENABLED and terminated:
-            scenario_ended = self.check_termination_criteria()
-            if scenario_ended:
-                scenario_ended_flag = True  # Mark that scenario ended and final penalty was calculated
-                unresolved_count = 0
-                resolved_count = 0
-                disruption_resolved_to_zero_count = 0
-                unresolved_flights = []
-                resolved_flights = []
-                
-                for (aircraft_id, flight_id) in self.initial_conflict_combinations:
-                    # Properly resolved = prob=1.00 AND not cancelled AND not auto-cancelled
-                    if (self.unavailabilities_dict[aircraft_id]['Probability'] == 1.00 
-                        and flight_id not in self.cancelled_flights 
-                        and flight_id not in self.automatically_cancelled_flights):
-                        resolved_count += 1
-                        resolved_flights.append(flight_id)
-                    elif (self.unavailabilities_dict[aircraft_id]['Probability'] == 0.00
-                        and flight_id not in self.cancelled_flights 
-                        and flight_id not in self.automatically_cancelled_flights):
-                        disruption_resolved_to_zero_count += 1
-                    else:
-                        # Unresolved = still uncertain OR cancelled OR auto-cancelled
-                        unresolved_count += 1
-                        unresolved_flights.append(flight_id)
-
-                # Apply penalty for unresolved conflicts
-                unresolved_conflict_penalty = unresolved_count * UNRESOLVED_CONFLICT_PENALTY
-                self.scenario_wide_resolved_initial_conflicts += resolved_count
-                self.scenario_wide_disruption_resolved_to_zero_count += disruption_resolved_to_zero_count
-
-                # Calculate scenario-wide solution slack
-                self._calculate_scenario_wide_solution_slack()
-                
-                if DEBUG_MODE_REWARD:
-                    status = "ENABLED" if PENALTY_6_FINAL_REWARD_ENABLED else "DISABLED"
-                    print(f"  [Penalty #6: {status}] Scenario ended - Conflict Resolution Summary:")
-                    print(f"    Properly resolved: {resolved_count} conflicts {resolved_flights}")
-                    print(f"    Unresolved/Cancelled: {unresolved_count} conflicts {unresolved_flights}")
-                    print(f"    -{unresolved_conflict_penalty:.2f} penalty for unresolved conflicts ({unresolved_count} * {UNRESOLVED_CONFLICT_PENALTY})")
-            elif DEBUG_MODE_REWARD:
-                print(f"  [Penalty #6] Episode-end penalty NOT applied because scenario_ended=False (termination criteria not met)")
             
         # 8. Probability-aware shaping: reward resolving high-probability conflicts
         # Only give bonus if agent took an action that resolved conflicts (not if conflicts disappeared naturally)
         probability_resolution_bonus = 0
         resolved_probability_total = 0
-        tail_swap_resolved_conflict = False  # Track if this tail swap resolved a conflict
-        
         if (PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED 
             and resolved_conflicts 
             and PROBABILITY_RESOLUTION_BONUS_SCALE > 0
@@ -1802,16 +1808,8 @@ class AircraftDisruptionEnv(gym.Env):
                     pre_prob = 1.0  # fallback: treat as certain if unknown
 
                 resolved_probability_total += max(0.0, pre_prob)
-                
-                # If we got here, this action resolved a conflict
-                if self.tail_swap_happened:
-                    tail_swap_resolved_conflict = True
 
             probability_resolution_bonus = resolved_probability_total * PROBABILITY_RESOLUTION_BONUS_SCALE
-            
-            # Track tail swaps that resolved conflicts (only if bonus was given)
-            if tail_swap_resolved_conflict and probability_resolution_bonus > 0:
-                self.scenario_wide_tail_swaps_resolving += 1
 
         if DEBUG_MODE_REWARD:
             status = "ENABLED" if PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED else "DISABLED"
@@ -1837,22 +1835,26 @@ class AircraftDisruptionEnv(gym.Env):
             if low_confidence_action_penalty > 0:
                 print(f"  [Penalty #9: {status}] -{low_confidence_action_penalty} penalty for acting on low-confidence disruption (prob={self.last_action_probability:.2f} < {LOW_CONFIDENCE_ACTION_THRESHOLD}) without resolving conflicts")
 
+        # 10. Non-action penalty: Penalize actions that don't change anything when conflicts remain
+        # If agent takes a non-(0,0) action but nothing happens (something_happened=False),
+        # and conflicts still remain, this is wasteful and should be penalized
+        # However, if no conflicts remain, the action is harmless (environment is just waiting)
+        non_action_penalty = 0
+        if PENALTY_3_INACTION_ENABLED:  # Reuse the inaction penalty flag for consistency
+            # Using 'remaining_conflicts' directly (set is falsy when empty, truthy when non-empty)
+            if (
+                flight_action != 0  # Not a (0,0) action
+                and not self.something_happened  # Action didn't change anything
+                and remaining_conflicts  # Conflicts still remain
+            ):
+                non_action_penalty = NO_ACTION_PENALTY  # Same penalty as inaction
 
-        # # 10. Action taking bonus: Reward for taking any action that changes state: encourages exploration and makes actions less scary than inaction
-        # # Helps agent learn that taking actions is better than doing nothing
-        # action_taking_bonus = 0.0
-        # if flight_action != 0 and self.something_happened:
-        #     action_taking_bonus = 0  # Small reward for taking action that changes state
+        if DEBUG_MODE_REWARD:
+            if non_action_penalty > 0:
+                print(f"  [Penalty #10] -{non_action_penalty} penalty for non-(0,0) action that didn't change anything with {len(remaining_conflicts)} conflicts remaining")
+            elif flight_action != 0 and not self.something_happened and not remaining_conflicts:
+                print(f"  [Penalty #10] No penalty for non-(0,0) action that didn't change anything (no conflicts remain - waiting is fine)")
 
-        # if DEBUG_MODE_REWARD and action_taking_bonus > 0:
-        #     print(f"  [Reward #11] +{action_taking_bonus} bonus for taking action that changed state (encourages exploration)")
-
-        
-        # Track inefficient tail swaps (tail swaps that didn't resolve conflicts)
-        # This handles cases where tail_swap_happened but wasn't counted in reward #8
-        if self.tail_swap_happened and not tail_swap_resolved_conflict:
-            self.scenario_wide_tail_swaps_inefficient += 1
-        
         # Reset tail swap tracking for next step
         self.tail_swap_happened = False
 
@@ -1860,17 +1862,29 @@ class AircraftDisruptionEnv(gym.Env):
         for flight_id, delay in self.environment_delayed_flights.items():
             self.penalized_delays[flight_id] = delay
 
+        # Small reward for taking any action that changes state
+        # This encourages exploration and makes actions less scary than inaction
+        # Helps agent learn that taking actions is better than doing nothing
+        action_taking_bonus = 0.0
+        if flight_action != 0 and self.something_happened:
+            action_taking_bonus = 0.1  # Small reward for taking action that changes state
+
+        if DEBUG_MODE_REWARD and action_taking_bonus > 0:
+            print(f"  [Reward #11] +{action_taking_bonus} bonus for taking action that changed state (encourages exploration)")
+
+        # Calculate total reward - SIMPLE PENALTY-BASED STRUCTURE
         reward = (
-            - delay_penalty_total               
-            - cancel_penalty                    
-            - inaction_penalty                  
-            - proactive_penalty                 
-            - time_penalty                      
-            - automatic_cancellation_penalty    
-            - unresolved_conflict_penalty       
-            - low_confidence_action_penalty     
-            + probability_resolution_bonus      
-            # + action_taking_bonus              
+            - delay_penalty_total
+            - cancel_penalty
+            - inaction_penalty
+            - automatic_cancellation_penalty
+            - proactive_penalty
+            - time_penalty
+            - low_confidence_action_penalty
+            - non_action_penalty  # Penalty for non-(0,0) actions that don't change anything when conflicts remain
+            + final_conflict_resolution_reward  # Only positive reward: final resolution
+            + probability_resolution_bonus
+            + action_taking_bonus  # Small reward for action-taking (encourages exploration)
         )
 
         # Update scenario-wide reward components
@@ -1880,11 +1894,12 @@ class AircraftDisruptionEnv(gym.Env):
             "inaction_penalty": self.scenario_wide_reward_components["inaction_penalty"] - inaction_penalty,
             "proactive_penalty": self.scenario_wide_reward_components.get("proactive_penalty", 0) - proactive_penalty,
             "time_penalty": self.scenario_wide_reward_components["time_penalty"] - time_penalty,
-            "unresolved_conflict_penalty": self.scenario_wide_reward_components.get("unresolved_conflict_penalty", 0) - unresolved_conflict_penalty,
+            "final_conflict_resolution_reward": self.scenario_wide_reward_components["final_conflict_resolution_reward"] + final_conflict_resolution_reward,
             "automatic_cancellation_penalty": self.scenario_wide_reward_components["automatic_cancellation_penalty"] - automatic_cancellation_penalty,
-            "probability_resolution_bonus": self.scenario_wide_reward_components.get("probability_resolution_bonus", 0) + probability_resolution_bonus,
-            "low_confidence_action_penalty": self.scenario_wide_reward_components["low_confidence_action_penalty"] - low_confidence_action_penalty
-            # "action_taking_bonus": self.scenario_wide_reward_components.get("action_taking_bonus", 0) + action_taking_bonus
+            "probability_resolution_bonus": self.scenario_wide_reward_components["probability_resolution_bonus"] + probability_resolution_bonus,
+            "low_confidence_action_penalty": self.scenario_wide_reward_components["low_confidence_action_penalty"] - low_confidence_action_penalty,
+            "non_action_penalty": self.scenario_wide_reward_components.get("non_action_penalty", 0) - non_action_penalty,
+            "action_taking_bonus": self.scenario_wide_reward_components.get("action_taking_bonus", 0) + action_taking_bonus
         })
 
         # Store reward components in state
@@ -1895,9 +1910,10 @@ class AircraftDisruptionEnv(gym.Env):
         self.state[0, 9] = proactive_penalty
         self.state[0, 10] = time_penalty
         self.state[0, 11] = automatic_cancellation_penalty
-        self.state[0, 12] = unresolved_conflict_penalty
+        self.state[0, 12] = final_conflict_resolution_reward
         self.state[0, 13] = probability_resolution_bonus
         self.state[0, 14] = low_confidence_action_penalty
+        self.state[0, 15] = non_action_penalty
 
         # Round final reward to 4 decimal places to preserve small penalty values (e.g., time penalty 0.003)
         # This ensures the DQN receives actual penalty values, not rounded zeros
@@ -1925,10 +1941,10 @@ class AircraftDisruptionEnv(gym.Env):
             "total_reward": reward,
             "something_happened": self.something_happened,
             "current_time_minutes": (self.current_datetime - self.earliest_datetime).total_seconds() / 60,
-            "current_time_minutes_from_start": (self.current_datetime - self.start_datetime).total_seconds() / 60,
-            "start_datetime": str(self.start_datetime),
-            "earliest_datetime": str(self.earliest_datetime),
-            "current_datetime": str(self.current_datetime),
+            "current_time_minutes_from_start": (self.current_datetime - self.start_datetime).total_seconds() / 60,  # Add this for debugging
+            "start_datetime": str(self.start_datetime),  # Add for debugging
+            "earliest_datetime": str(self.earliest_datetime),  # Add for debugging
+            "current_datetime": str(self.current_datetime),  # Add for debugging
             "resolved_conflicts_count": len(resolved_conflicts),
             "resolved_conflicts_entries": [tuple(conflict) for conflict in resolved_conflicts],
             "remaining_conflicts_count": len(remaining_conflicts),
@@ -1956,10 +1972,11 @@ class AircraftDisruptionEnv(gym.Env):
                 "automatic_cancellation_penalty": automatic_cancellation_penalty,
                 "proactive_penalty": proactive_penalty,
                 "time_penalty": time_penalty,
-                "unresolved_conflict_penalty": unresolved_conflict_penalty,
+                "final_conflict_resolution_reward": final_conflict_resolution_reward,
                 "probability_resolution_bonus": probability_resolution_bonus,
-                "low_confidence_action_penalty": low_confidence_action_penalty
-                # "action_taking_bonus": action_taking_bonus
+                "low_confidence_action_penalty": low_confidence_action_penalty,
+                "non_action_penalty": non_action_penalty,
+                "action_taking_bonus": action_taking_bonus
             },
             # Penalty enable flags (for debugging/verification)
             "penalty_flags": {
@@ -1974,41 +1991,6 @@ class AircraftDisruptionEnv(gym.Env):
                 "penalty_9_low_confidence_action_enabled": PENALTY_9_LOW_CONFIDENCE_ACTION_ENABLED
             }
         }
-        
-        # Add scenario-wide metrics ONLY when scenario ends (penalty #6 is calculated)
-        # This saves memory by not storing metrics at every step
-        if scenario_ended_flag:
-            # Determine why scenario ended: time limit vs successful completion
-            time_limit_reached = self.current_datetime >= self.end_datetime
-            criteria_met = self.check_termination_criteria()
-            ended_due_to_time_limit = time_limit_reached and not criteria_met
-            
-            self.info_after_step["scenario_metrics"] = {
-                # Action counts
-                "delay_minutes": self.scenario_wide_delay_minutes,
-                "delay_count": self.scenario_wide_delay_count,
-                "cancelled_flights": self.scenario_wide_cancelled_flights,
-                "automatically_cancelled_count": self.scenario_wide_automatically_cancelled_count,
-                "tail_swaps_total": self.scenario_wide_tail_swaps,
-                "tail_swaps_resolving": self.scenario_wide_tail_swaps_resolving,
-                "tail_swaps_inefficient": self.scenario_wide_tail_swaps_inefficient,
-                "inaction_count": self.scenario_wide_inaction_count,
-                "resolved_initial_conflicts": self.scenario_wide_resolved_initial_conflicts,
-                "scenario_wide_disruption_resolved_to_zero_count": self.scenario_wide_disruption_resolved_to_zero_count,
-                "steps": self.scenario_wide_steps,
-                # Cumulative penalty/reward values (breakdown of total reward)
-                "reward_components": {
-                    "delay_penalty_total": self.scenario_wide_reward_components["delay_penalty_total"],
-                    "cancel_penalty": self.scenario_wide_reward_components["cancel_penalty"],
-                    "inaction_penalty": self.scenario_wide_reward_components["inaction_penalty"],
-                    "proactive_penalty": self.scenario_wide_reward_components.get("proactive_penalty", 0),
-                    "time_penalty": self.scenario_wide_reward_components["time_penalty"],
-                    "unresolved_conflict_penalty": self.scenario_wide_reward_components.get("unresolved_conflict_penalty", 0),
-                    "automatic_cancellation_penalty": self.scenario_wide_reward_components["automatic_cancellation_penalty"],
-                    "probability_resolution_bonus": self.scenario_wide_reward_components.get("probability_resolution_bonus", 0),
-                    "low_confidence_action_penalty": self.scenario_wide_reward_components["low_confidence_action_penalty"]
-                }
-            }
 
         return reward
 
@@ -2270,7 +2252,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for j in range(4, self.columns_state_space - 3, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2312,7 +2295,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for j in range(4, self.columns_state_space - 3, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2358,7 +2342,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for j in range(4, self.columns_state_space - 3, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2375,11 +2360,6 @@ class AircraftDisruptionEnv(gym.Env):
                         if flight_dep < unavail_end and flight_arr > unavail_start:
                             conflict_identifier = (aircraft_id, flight_id, flight_dep, flight_arr)
                             current_conflicts.add(conflict_identifier)
-                            if DEBUG_MODE_REWARD:
-                                print(f"  [CONFLICT DETECTED] {aircraft_id}, Flight {flight_id}: dep={flight_dep:.1f}, arr={flight_arr:.1f} vs unavail {unavail_start:.1f}-{unavail_end:.1f}")
-                        elif DEBUG_MODE_REWARD:
-                            # Debug: Why wasn't this a conflict?
-                            print(f"  [NO CONFLICT] {aircraft_id}, Flight {flight_id}: dep={flight_dep:.1f}, arr={flight_arr:.1f} vs unavail {unavail_start:.1f}-{unavail_end:.1f}")
 
         return current_conflicts
     
@@ -2411,7 +2391,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                for j in range(4, self.columns_state_space - 3, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2454,7 +2435,8 @@ class AircraftDisruptionEnv(gym.Env):
                 continue
 
             # Check flights on this aircraft
-            for j in range(4, self.columns_state_space - 2, 3):
+            # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+            for j in range(4, self.columns_state_space - 3, 4):
                 flight_id = self.state[idx + 1, j]
                 flight_dep = self.state[idx + 1, j + 1]
                 flight_arr = self.state[idx + 1, j + 2]
@@ -2499,18 +2481,6 @@ class AircraftDisruptionEnv(gym.Env):
 
         return True
 
-    
-    def end_of_recovery_period_reached(self):
-        """Checks if the scenario has ended because the time exceeds the recovery period.
-
-        Returns:
-            tuple: (bool, str) indicating if the scenario is done and the reason.
-        """
-        if self.current_datetime >= self.end_datetime:
-            return True, "Reached the end of the simulation time."
-        else:
-            return False, "Endtime scenario not yet reached"
-        
 
     def _is_done(self):
         """Checks if the episode is finished.
@@ -2644,7 +2614,8 @@ class AircraftDisruptionEnv(gym.Env):
                             break
                             
                         # Check flights assigned to this aircraft for departures during disruption
-                        for j in range(4, self.columns_state_space - 2, 3):
+                        # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                        for j in range(4, self.columns_state_space - 3, 4):
                             flight_id = self.state[idx + 1, j]
                             dep_time = self.state[idx + 1, j + 1]
                             arr_time = self.state[idx + 1, j + 2]
@@ -2829,7 +2800,8 @@ class AircraftDisruptionEnv(gym.Env):
                 # For uncertain conflicts, allow the move (will be resolved later)
         
         # Check for conflicts with existing flights on target aircraft
-        for j in range(4, self.columns_state_space - 2, 3):
+        # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+        for j in range(4, self.columns_state_space - 3, 4):
             existing_flight_id = self.state[target_aircraft_idx, j]
             existing_dep = self.state[target_aircraft_idx, j + 1]
             existing_arr = self.state[target_aircraft_idx, j + 2]
@@ -3061,7 +3033,8 @@ class AircraftDisruptionGreedyReactive(AircraftDisruptionEnv):
                         break
                         
                     # Check flights assigned to this aircraft for departures during disruption
-                    for j in range(4, self.columns_state_space - 2, 3):
+                    # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                    for j in range(4, self.columns_state_space - 3, 4):
                         flight_id = self.state[idx + 1, j]
                         dep_time = self.state[idx + 1, j + 1]
                         arr_time = self.state[idx + 1, j + 2]
@@ -3256,7 +3229,8 @@ class AircraftDisruptionGreedyProactive(AircraftDisruptionEnv):
                         break
                         
                     # Check flights assigned to this aircraft for departures during disruption
-                    for j in range(4, self.columns_state_space - 2, 3):
+                    # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                    for j in range(4, self.columns_state_space - 3, 4):
                         flight_id = self.state[idx + 1, j]
                         dep_time = self.state[idx + 1, j + 1]
                         arr_time = self.state[idx + 1, j + 2]
@@ -3361,8 +3335,6 @@ class AircraftDisruptionConflicted(AircraftDisruptionEnv):
         action_mask = np.zeros(self.action_space.n, dtype=np.uint8)
         
         # Get current conflicts
-        if DEBUG_MODE_REWARD:
-            print(f"current conflicts in get_action_mask:")
         current_conflicts = self.get_current_conflicts()
         
         # Build a mapping: flight_id -> set of aircraft_ids it's in conflict with
@@ -3461,7 +3433,8 @@ class AircraftDisruptionConflicted(AircraftDisruptionEnv):
                             break
                             
                         # Check flights assigned to this aircraft for departures during disruption
-                        for j in range(4, self.columns_state_space - 2, 3):
+                        # UPDATED: Step size changed from 3 to 4 to account for conflict flag
+                        for j in range(4, self.columns_state_space - 3, 4):
                             flight_id = self.state[idx + 1, j]
                             dep_time = self.state[idx + 1, j + 1]
                             arr_time = self.state[idx + 1, j + 2]

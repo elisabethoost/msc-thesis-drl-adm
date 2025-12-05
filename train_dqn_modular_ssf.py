@@ -13,15 +13,15 @@ import pickle
 import gymnasium as gym
 import matplotlib.pyplot as plt
 from datetime import datetime
-from scripts.utils import *
-from scripts.visualizations import *
-from src.config_rf import *
+from scripts.utils_ssf import *
+from scripts.visualizations_ssf import *
+from src.config_ssf import *
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.utils import polyak_update, set_random_seed
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-from scripts.utils import NumpyEncoder
+from scripts.utils_ssf import NumpyEncoder
 from scripts.logger import *
 from stable_baselines3.common.prioritized_replay_buffer import PrioritizedReplayBuffer
 from training_utils import TrainingMonitor
@@ -55,7 +55,7 @@ def run_train_dqn_both_timesteps(
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
     # Constants and Training Settings - FIXED FOR STABLE LEARNING
-    LEARNING_RATE = 0.0005                    # INCREASED from 0.0001 - agent needs faster learning to improve over time
+    LEARNING_RATE = 0.0001                    # the learning rate is the step size for the gradient descent algorithm
     GAMMA = 0.9999                            # Standard discount factor for future rewards.
     BUFFER_SIZE = 100000                     # Increased buffer size for better experience replay
     BATCH_SIZE = 128                         # Standard batch size for stability
@@ -64,16 +64,16 @@ def run_train_dqn_both_timesteps(
     
 
     LEARNING_STARTS = 0                # More steps before training starts
-    TRAIN_FREQ = 20                          # INCREASED from 4 - train every step for faster learning
+    TRAIN_FREQ = 4                          # More frequent training
 
     # Episode termination settings
     MAX_STEPS_PER_SCENARIO = 40             # Maximum steps per scenario (increased from 25 for more time to solve)
 
     # Exploration parameters - FIXED FOR STABLE LEARNING
     EPSILON_START = 1.0                      # Starts with 100% random exploration
-    EPSILON_MIN = 0.15                        # Keep exploring 15% even late in training (increased from 0.025 for more exploration)
-    PERCENTAGE_MIN = 90                     # Decay over 95% of training (maintains long exploration period)
-    EPSILON_TYPE = "exponential"                 # Use exponential decay for gradual learning
+    EPSILON_MIN = 0.025                        # Higher minimum for gradual transition (increased from 0.01)
+    PERCENTAGE_MIN = 80                     # Decay over 80% of training (increased from 40)
+    EPSILON_TYPE = "exponential"                 # Use linear decay for more predictable learning
     if EPSILON_TYPE == "linear":
         EPSILON_MIN = 0
 
@@ -120,7 +120,7 @@ def run_train_dqn_both_timesteps(
     # each time you run the main script, a new ID is created
     from scripts.logger import create_new_id, get_config_variables
     # import src.config_rf as config  # Use the same config as the environment LOLL
-    import src.config_rf as config  # Use the same config as the environment
+    import src.config_ssf as config  # Use the same config as the environment
     all_logs = {}
     def train_dqn_agent(env_type, seed, save_training_monitor=False):
         log_data = {}  # Main dictionary to store all logs
@@ -213,7 +213,7 @@ def run_train_dqn_both_timesteps(
 
                 # from src.environment_simplified import AircraftDisruptionEnv LOLL
                 # from src.original_environment import AircraftDisruptionEnv
-                from src.environment_rf import AircraftDisruptionEnv
+                from src.environment_ssf import AircraftDisruptionEnv
                 env = AircraftDisruptionEnv(
                     aircraft_dict,
                     flights_dict,
@@ -304,7 +304,7 @@ def run_train_dqn_both_timesteps(
         # initialize the environment
         # from src.environment_simplified import AircraftDisruptionEnv LOLL
         # from src.original_environment import AircraftDisruptionEnv
-        from src.environment_rf import AircraftDisruptionEnv
+        from src.environment_ssf import AircraftDisruptionEnv
         
         # Create a minimal environment first to get the correct observation space
         # This environment will be used to initialize the model with the correct observation space
@@ -489,9 +489,15 @@ def run_train_dqn_both_timesteps(
                     "cancelled_flights": env.cancelled_flights.copy(),
                     "unavailabilities_probabilities": initial_unavailabilities_probabilities  # Store initial probabilities
                 }
-                
-                
+
                 while not done_flag and not max_steps_reached:
+                    num_cancelled_flights_before_step = len(env.cancelled_flights)             # immediately after reset this is 0 as there are no cancelled flights at the start of the episode
+                    num_delayed_flights_before_step = len(env.environment_delayed_flights)     # empty dictionary
+                    num_penalized_delays_before_step = len(env.penalized_delays)               # empty dictionary
+                    num_penalized_cancelled_before_step = len(env.penalized_cancelled_flights)
+                    num_automatically_cancelled_before_step = len(env.automatically_cancelled_flights)
+                    num_penalized_automatically_cancelled_before_step = len(env.penalized_automatically_cancelled_flights) # empty set
+
                     model.exploration_rate = epsilon
 
                     action_mask = obs['action_mask']
@@ -506,21 +512,14 @@ def run_train_dqn_both_timesteps(
                     current_seed = int(time.time() * 1e9) % (2**32 - 1)
                     np.random.seed(current_seed)
 
-                    if DEBUG_MODE_REWARD:
-                        print("")
-                        print(f"Current scenario: {scenario_folder}, epsilon: {epsilon}, episode: {episode}, local timesteps: {timesteps_local}, total timesteps: {total_timesteps}")
-
                     action_reason = "None"
                     if env_type == "drl-greedy" or env_type == "myopic" or env_type == "proactive" or env_type == "reactive":
                         if np.random.rand() < epsilon or brute_force_flag:
                             # During exploration (50% the conflicted flights, 50% random)
-                            if np.random.rand() < 0.8:
+                            if np.random.rand() < 0.5:
                                 # Get current conflicts and use them to guide exploration
                                 # Prefer actions that operate on conflicted flights (any aircraft); rely on env scheduling
-                                if DEBUG_MODE_REWARD:
-                                    print(f"Current conflicts train_dqn_modular:")
                                 current_conflicts = env.get_current_conflicts()
-                                
                                 if current_conflicts:
                                     # Build set of conflicted flight IDs from conflict tuples: (aircraft_id, flight_id, dep, arr)
                                     conflicted_flight_ids = set()
@@ -572,15 +571,12 @@ def run_train_dqn_both_timesteps(
                             action = np.argmax(masked_q_values)
                             action = np.array(action).reshape(1, -1)
                             action_reason = "exploitation"
-                    
-                    if DEBUG_MODE_REWARD:
-                        print(f"Action: {action}, flight_action, aircraft_action = {env.map_index_to_action(action.item())}")
-                        print(f"action reason: {action_reason}")
 
                     result = env.step(action.item())  # Convert back to scalar for the environment
                     obs_next, reward, terminated, truncated, info = result
+                    # print(f"    ****    Action: {action}, flight: {env.map_index_to_action(action)[0]}, aircraft: {env.map_index_to_action(action)[1]}")
 
-                    done_flag = terminated or truncated 
+                    done_flag = terminated or truncated     # done_flag is True if the episode is terminated or truncated
 
                     model.replay_buffer.add(
                         obs=obs,
@@ -593,9 +589,17 @@ def run_train_dqn_both_timesteps(
 
                     obs = obs_next
 
-                    # Decay epsilon after each step (not episode) - ensures gradual exploration->exploitation transition
-                    # With ~130 scenarios × ~20 steps = ~2,600 steps/episode, epsilon must decay slowly
-                    # EPSILON_MIN = 0.15 ensures 15% exploration continues even late in training
+                    # # OPTIMIZED: Use exponential epsilon decay for better exploration
+                    # if EPSILON_TYPE == "linear":
+                    #     progress = total_timesteps / (MAX_TOTAL_TIMESTEPS * PERCENTAGE_MIN / 100)
+                    #     epsilon = max(EPSILON_MIN, EPSILON_START - progress * (EPSILON_START - EPSILON_MIN))
+                    # else:
+                    #     # Exponential decay with better rate
+                    #     # epsilon = max(EPSILON_MIN, epsilon * (1 - EPSILON_DECAY_RATE))
+                    #     decay_rate = 0.9995  # Slower decay for better exploration
+                    #     epsilon = max(EPSILON_MIN, epsilon * decay_rate)
+                    # epsilon_values.append((episode + 1, epsilon))
+
                     epsilon = max(EPSILON_MIN, epsilon * (1 - EPSILON_DECAY_RATE))
                     epsilon_values.append((episode + 1, epsilon))
 
@@ -625,7 +629,7 @@ def run_train_dqn_both_timesteps(
                     # Removed frequent progress logging to avoid slowing down training
 
                     if total_timesteps > model.learning_starts and total_timesteps % TRAIN_FREQ == 0:
-                        model.train(gradient_steps=1, batch_size=BATCH_SIZE) #performs mini SGD (stochastic gradient descent)
+                        model.train(gradient_steps=1, batch_size=BATCH_SIZE)
 
                     if total_timesteps % model.target_update_interval == 0:
                         polyak_update(model.q_net.parameters(), model.q_net_target.parameters(), model.tau)
@@ -643,8 +647,17 @@ def run_train_dqn_both_timesteps(
                             model, total_timesteps, episode, rewards, test_rewards, epsilon_values, epsilon
                         )
 
-                    # Extract scenario-wide metrics from info dict (only present when scenario ends)
-                    scenario_metrics = info.get("scenario_metrics", None)
+                    num_cancelled_flights_after_step = len(env.cancelled_flights)
+                    num_delayed_flights_after_step = len(env.environment_delayed_flights)
+                    num_penalized_delays_after_step = len(env.penalized_delays)
+                    num_penalized_cancelled_after_step = len(env.penalized_cancelled_flights)
+
+                    impact_of_action = {
+                        "num_cancelled_flights": num_cancelled_flights_after_step - num_cancelled_flights_before_step,
+                        "num_delayed_flights": num_delayed_flights_after_step - num_delayed_flights_before_step,
+                        "num_penalized_delays": num_penalized_delays_after_step - num_penalized_delays_before_step,
+                        "num_penalized_cancelled": num_penalized_cancelled_after_step - num_penalized_cancelled_before_step,
+                    }
                     
                     # Extract penalty details from info dict
                     penalties_dict = info.get("penalties", {})
@@ -654,7 +667,7 @@ def run_train_dqn_both_timesteps(
                     automatic_cancellation_penalty = penalties_dict.get("automatic_cancellation_penalty", 0.0)
                     proactive_penalty = penalties_dict.get("proactive_penalty", 0.0)
                     time_penalty = penalties_dict.get("time_penalty", 0.0)
-                    unresolved_conflict_penalty = penalties_dict.get("unresolved_conflict_penalty", 0.0)
+                    final_conflict_resolution_reward = penalties_dict.get("final_conflict_resolution_reward", 0.0)
                     probability_resolution_bonus = penalties_dict.get("probability_resolution_bonus", 0.0)  # Reward #8
                     low_confidence_action_penalty = penalties_dict.get("low_confidence_action_penalty", 0.0)  # Penalty #9
                     something_happened = info.get("something_happened", False)
@@ -701,7 +714,7 @@ def run_train_dqn_both_timesteps(
                             "proactive_penalty": proactive_penalty,  # New format
                             "time": time_penalty,  # Old format
                             "time_penalty": time_penalty,  # New format
-                            "unresolved_conflict_penalty": unresolved_conflict_penalty,
+                            "final_conflict_resolution_reward": final_conflict_resolution_reward,
                             "probability_resolution_bonus": probability_resolution_bonus,  # Reward #8
                             "low_confidence_action_penalty": low_confidence_action_penalty,  # Penalty #9
                         },
@@ -715,6 +728,7 @@ def run_train_dqn_both_timesteps(
                         "cancelled_flights": env.cancelled_flights.copy(),
                         "penalized_delays": env.penalized_delays.copy(),
                         "penalized_cancelled_flights": env.penalized_cancelled_flights.copy(),
+                        "impact_of_action": impact_of_action,
                         "penalty_flags": penalty_flags,  # Store penalty flags for analysis
                         "flights_dict": {k: v.copy() for k, v in env.flights_dict.items()},  # Store updated flight times
                         "rotations_dict": {k: v.copy() for k, v in env.rotations_dict.items()},  # Store updated rotations
@@ -740,10 +754,6 @@ def run_train_dqn_both_timesteps(
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_reward"] = total_reward_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_steps"] = timesteps_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["episode_ended_reason"] = "max_steps_reached" if max_steps_reached else "natural_termination"
-                
-                # Only store scenario metrics if they exist (i.e., scenario ended properly with penalty #6)
-                if scenario_metrics is not None:
-                    detailed_episode_data[episode]["scenarios"][scenario_folder]["final_scenario_metrics"] = scenario_metrics
 
             # Perform cross-validation if enabled
             if cross_val_flag:
