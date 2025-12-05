@@ -1,0 +1,5 @@
+%Aircraft Model Family Config Dist Cost/h TurnRound Transit Orig Maint
+B737#1 B737 Boeing 0/0/123 5000 1800.0 30 30 CFE NULL
+B737#2 B737 Boeing 0/0/123 5000 1800.0 30 30 CFE NULL
+B737#3 B737 Boeing 0/0/123 5000 1800.0 30 30 CFE NULL
+#

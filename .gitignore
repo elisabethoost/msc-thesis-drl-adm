@@ -5,15 +5,14 @@ venv/
 __pycache__/
 .DS_Store
 
-# add Training and Testing folders
-data/Training*/
+# add Testing folders
 data/Testing*/
 data/RESULTS*/
 data/REVERSED*/
 
-# Ignore all Data/TRAINING folders by default
+# Ignore all Data/TRAINING subfolders by default
 Data/TRAINING/*
-# But allow specific folders
+# But specifically allow these folders and their contents
 !Data/TRAINING/3ac-130-green/
 !Data/TRAINING/3ac-130-green/**
 !Data/TRAINING/3ac-182-green16/
