@@ -75,8 +75,10 @@ def plot_episode_metrics(detailed_episode_data, episode, model_folder, env_type,
     total_steps = []
     
     for scenario_folder, scenario_data in detailed_episode_data[episode]["scenarios"].items():
-        # Metrics only exist if scenario ended properly (penalty #6 was calculated)
+        # Metrics only exist if scenario ended properly (scenario_ended_flag was True)
         # If scenario hit step limit or ended early, metrics won't be present
+        # Note: Metrics are tracked regardless of penalty flags being enabled/disabled
+        # This script only uses metrics (counts, delays, etc.), not reward values
         metrics = scenario_data.get("final_scenario_metrics", None)
         
         if metrics is None:
@@ -236,11 +238,11 @@ def main():
     #   Model 1: "results/model1_rf/training/m1_1/3ac-182-green16"
     #   Model 2: "results/model2_ssf/training/m2_1/3ac-182-green16"
     #   Model 3: "results/model3_ssf_large/training/m3_1/3ac-182-green16"
-    MODEL_FOLDER = "results/model1_rf/training/m1_1/3ac-182-green16"  # Path to your model folder (relative to project root)
+    MODEL_FOLDER = "results/model1_rf/training/m1_2/3ac-182-green16"  # Path to your model folder (relative to project root)
     ENV_TYPE = "proactive"  # "myopic", "proactive", or "reactive"
     SEED = 232323  # Your training seed
-    EPISODE_X = 0  # First episode to visualize (e.g., early training)
-    EPISODE_Y = 9  # Second episode to visualize (e.g., late training)
+    EPISODE_X = 9  # First episode to visualize (e.g., early training)
+    EPISODE_Y = 40  # Second episode to visualize (e.g., late training)
     
     print(f"Loading episode data from: {MODEL_FOLDER}")
     print(f"Environment type: {ENV_TYPE}, Seed: {SEED}")

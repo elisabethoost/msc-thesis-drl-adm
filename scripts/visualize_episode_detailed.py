@@ -3,6 +3,9 @@
 Detailed Episode and Scenario Visualization
 Combines schedule visualization with step-by-step metrics analysis
 
+NOTE: This script supports all three models (Model 1 RF, Model 2 SSF, Model 3 SSF Large).
+It auto-detects the reward structure based on which penalties/rewards are present in the data.
+
 This script provides:
 1. Visual representation of the initial schedule and each step
 2. Epsilon values and rewards at each step
@@ -19,13 +22,10 @@ Examples:
     python scripts/visualize_episode_detailed.py results/model1_rf/training/m1_2/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
     
     # Model 2 (SSF) - results/model2_ssf/training/m2_1/3ac-182-green16
-    python scripts/visualize_episode_detailed.py results/model2_ssf/training/m2_1/3ac-182-green16 proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"
+    python scripts/visualize_episode_detailed.py results/model2_ssf/training/m2_1/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
     
-    # Model 3 (SSF Large Dimensions) - results/model3_ssf_large/training/m3_1/3ac-182-green16
-    python scripts/visualize_episode_detailed.py results/model3_ssf_large/training/m3_1/3ac-182-green16 proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"
-    
-    # Legacy format (still supported)
-    python scripts/visualize_episode_detailed.py Final_Model_21/3ac-182-green16 proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"
+    # Model 3 (SSF Large) - results/model3_ssf_large/training/m3_1/3ac-182-green16
+    python scripts/visualize_episode_detailed.py results/model3_ssf_large/training/m3_1/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
     
 """
 
@@ -187,33 +187,43 @@ class DetailedEpisodeVisualizer:
             
             if flight_id in flights_dict:
                 flight_info = flights_dict[flight_id]
-                dep_datetime_str = flight_info['DepTime']
-                arr_datetime_str = flight_info['ArrTime']
+                dep_time_value = flight_info['DepTime']
+                arr_time_value = flight_info['ArrTime']
                 
-                dep_datetime = parse_time_with_day_offset(dep_datetime_str, self.start_datetime)
-                arr_datetime = parse_time_with_day_offset(arr_datetime_str, dep_datetime)
-                
-                # Handle midnight crossings
-                if '+1' in dep_datetime_str and '+1' in arr_datetime_str:
-                    dep_datetime = self.start_datetime + timedelta(days=1)
-                    dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
-                                                     minute=int(dep_datetime_str.split(':')[1].split('+')[0]))
-                    arr_datetime = dep_datetime + timedelta(days=0)
-                    arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
-                                                     minute=int(arr_datetime_str.split(':')[1].split('+')[0]))
-                elif '+1' in dep_datetime_str:
-                    dep_datetime = self.start_datetime + timedelta(days=1)
-                    dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
-                                                     minute=int(dep_datetime_str.split(':')[1].split('+')[0]))
-                    arr_datetime = dep_datetime
-                    arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
-                                                     minute=int(arr_datetime_str.split(':')[1]))
-                elif '+1' in arr_datetime_str:
-                    dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
-                                                     minute=int(dep_datetime_str.split(':')[1]))
-                    arr_datetime = dep_datetime + timedelta(days=1)
-                    arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
-                                                     minute=int(arr_datetime_str.split(':')[1].split('+')[0]))
+                # Handle both string format (Model 1) and datetime format (Models 2 & 3)
+                if isinstance(dep_time_value, datetime):
+                    # Models 2 & 3: Already datetime objects, use directly
+                    dep_datetime = dep_time_value
+                    arr_datetime = arr_time_value
+                else:
+                    # Model 1: String format, parse and handle midnight crossings
+                    dep_datetime_str = str(dep_time_value)
+                    arr_datetime_str = str(arr_time_value)
+                    
+                    dep_datetime = parse_time_with_day_offset(dep_datetime_str, self.start_datetime)
+                    arr_datetime = parse_time_with_day_offset(arr_datetime_str, dep_datetime)
+                    
+                    # Handle midnight crossings (only for string format)
+                    if '+1' in dep_datetime_str and '+1' in arr_datetime_str:
+                        dep_datetime = self.start_datetime + timedelta(days=1)
+                        dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
+                                                         minute=int(dep_datetime_str.split(':')[1].split('+')[0]))
+                        arr_datetime = dep_datetime + timedelta(days=0)
+                        arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
+                                                         minute=int(arr_datetime_str.split(':')[1].split('+')[0]))
+                    elif '+1' in dep_datetime_str:
+                        dep_datetime = self.start_datetime + timedelta(days=1)
+                        dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
+                                                         minute=int(dep_datetime_str.split(':')[1].split('+')[0]))
+                        arr_datetime = dep_datetime
+                        arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
+                                                         minute=int(arr_datetime_str.split(':')[1]))
+                    elif '+1' in arr_datetime_str:
+                        dep_datetime = dep_datetime.replace(hour=int(dep_datetime_str.split(':')[0]), 
+                                                         minute=int(dep_datetime_str.split(':')[1]))
+                        arr_datetime = dep_datetime + timedelta(days=1)
+                        arr_datetime = arr_datetime.replace(hour=int(arr_datetime_str.split(':')[0]), 
+                                                         minute=int(arr_datetime_str.split(':')[1].split('+')[0]))
                 
                 earliest_time = min(earliest_time, dep_datetime)
                 latest_time = max(latest_time, arr_datetime)
@@ -413,8 +423,11 @@ class DetailedEpisodeVisualizer:
             "automatic_cancellation_penalty": "Automatic cancellation penalty",
             "proactive_penalty": "Proactive penalty (last-minute)",
             "time_penalty": "Time penalty",
-            "final_conflict_resolution_reward": "Final conflict resolution reward (LEGACY)",
+            # Model 1 (RF) specific
             "unresolved_conflict_penalty": "Episode-End Unresolved Conflict Penalty",
+            # Models 2 & 3 (SSF) specific
+            "final_conflict_resolution_reward": "Final Conflict Resolution Reward (Reward #6)",
+            # Common rewards/penalties
             "probability_resolution_bonus": "Probability resolution bonus (Reward #8)",
             "low_confidence_action_penalty": "Low-confidence action penalty (Penalty #9)",
             "non_action_penalty": "Ineffective action penalty (Penalty #10)",
@@ -498,6 +511,8 @@ class DetailedEpisodeVisualizer:
                         
                         # Determine if this is a reward (positive) or penalty (negative)
                         # Rewards: probability_resolution_bonus, final_conflict_resolution_reward, action_taking_bonus
+                        # Model 1 (RF): Uses unresolved_conflict_penalty (negative), no final_conflict_resolution_reward
+                        # Models 2 & 3 (SSF): Use final_conflict_resolution_reward (positive), no unresolved_conflict_penalty
                         is_reward = penalty_name in ["probability_resolution_bonus", "final_conflict_resolution_reward", "action_taking_bonus"]
                         
                         # For probability resolution bonus, add probability information

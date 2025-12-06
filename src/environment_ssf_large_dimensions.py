@@ -1504,25 +1504,32 @@ class AircraftDisruptionEnv(gym.Env):
             delay_penalty_total = 0
 
         # 2. Cancellation Penalty: Penalize newly cancelled flights
-        if PENALTY_2_CANCELLATION_ENABLED:
-            new_cancellations = {
-                flight_id for flight_id in self.cancelled_flights if flight_id not in self.penalized_cancelled_flights
-            }
-            cancellation_penalty_count = len(new_cancellations)
-            cancel_penalty = cancellation_penalty_count * CANCELLED_FLIGHT_PENALTY
+        # Always track cancellations, regardless of penalty flag
+        new_cancellations = {
+            flight_id for flight_id in self.cancelled_flights if flight_id not in self.penalized_cancelled_flights
+        }
+        cancellation_penalty_count = len(new_cancellations)
         
-            self.scenario_wide_cancelled_flights += cancellation_penalty_count
+        # Always track the count
+        self.scenario_wide_cancelled_flights += cancellation_penalty_count
+        
+        # Only apply penalty if enabled
+        if PENALTY_2_CANCELLATION_ENABLED:
+            cancel_penalty = cancellation_penalty_count * CANCELLED_FLIGHT_PENALTY
             self.penalized_cancelled_flights.update(new_cancellations)
         else:
             cancel_penalty = 0
-            cancellation_penalty_count = 0
-            new_cancellations = set()
+            # Still update penalized set to avoid double-counting, even if penalty is disabled
+            self.penalized_cancelled_flights.update(new_cancellations)
 
         # 3. Inaction Penalty: Penalize doing nothing when conflicts exist
+        # Always track inaction, regardless of penalty flag
+        if flight_action == 0:
+            self.scenario_wide_inaction_count += 1  # Track inaction occurrences
+        
+        # Only apply penalty if enabled
         if PENALTY_3_INACTION_ENABLED:
             inaction_penalty = NO_ACTION_PENALTY if flight_action == 0 and remaining_conflicts else 0
-            if inaction_penalty > 0:
-                self.scenario_wide_inaction_count += 1
         else:
             inaction_penalty = 0
 
@@ -1548,10 +1555,13 @@ class AircraftDisruptionEnv(gym.Env):
         # 6. Final Resolution Reward: Bonus for resolving real conflicts at scenario end
         final_conflict_resolution_reward = 0
         scenario_ended_flag = False
-        if PENALTY_6_FINAL_REWARD_ENABLED and terminated:
+        
+        # Always calculate metrics when scenario terminates, regardless of penalty #6 being enabled
+        # This ensures metrics are saved even when penalty #6 is disabled
+        if terminated:
             scenario_ended = self.check_termination_criteria()
             if scenario_ended:
-                scenario_ended_flag = True
+                scenario_ended_flag = True  # Mark that scenario ended (for metrics saving)
                 final_resolved_count = 0
                 resolved_flights = []
                 conflict_combinations = getattr(self, 'initial_conflict_combinations', getattr(self, 'eligible_flights_for_resolved_bonus', []))
@@ -1560,7 +1570,7 @@ class AircraftDisruptionEnv(gym.Env):
                         final_resolved_count += 1
                         resolved_flights.append(flight_id)
 
-                final_conflict_resolution_reward = final_resolved_count * RESOLVED_CONFLICT_REWARD
+                # Always update metrics when scenario ends
                 self.scenario_wide_resolved_conflicts += final_resolved_count
                 self.scenario_wide_resolved_initial_conflicts = final_resolved_count
                 
@@ -1573,29 +1583,38 @@ class AircraftDisruptionEnv(gym.Env):
                         if self.unavailabilities_dict[aircraft_id]['Probability'] == 0.00:
                             disruption_resolved_to_zero_count += 1
                 self.scenario_wide_disruption_resolved_to_zero_count = disruption_resolved_to_zero_count
+                
+                # Only apply reward if penalty #6 is enabled
+                if PENALTY_6_FINAL_REWARD_ENABLED:
+                    final_conflict_resolution_reward = final_resolved_count * RESOLVED_CONFLICT_REWARD
 
         # 7. Automatic cancellation of flights that have already departed
+        # Always track automatic cancellations, regardless of penalty flag
+        new_automatic_cancellations = {
+            flight_id for flight_id in self.automatically_cancelled_flights if flight_id not in self.penalized_automatically_cancelled_flights
+        }
+        automatic_cancellation_penalty_count = len(new_automatic_cancellations)
+        
+        # Always track the counts
+        self.scenario_wide_automatically_cancelled_count += automatic_cancellation_penalty_count
+        self.scenario_wide_cancelled_flights += automatic_cancellation_penalty_count
+        
+        # Only apply penalty if enabled
         if PENALTY_7_AUTO_CANCELLATION_ENABLED:
-            new_automatic_cancellations = {
-                flight_id for flight_id in self.automatically_cancelled_flights if flight_id not in self.penalized_automatically_cancelled_flights
-            }
-            automatic_cancellation_penalty_count = len(new_automatic_cancellations)
             automatic_cancellation_penalty = automatic_cancellation_penalty_count * AUTOMATIC_CANCELLATION_PENALTY
-            
-            self.scenario_wide_automatically_cancelled_count += automatic_cancellation_penalty_count
-            self.scenario_wide_cancelled_flights += automatic_cancellation_penalty_count
             self.penalized_automatically_cancelled_flights.update(new_automatic_cancellations)
         else:
             automatic_cancellation_penalty = 0
-            automatic_cancellation_penalty_count = 0
+            # Still update penalized set to avoid double-counting, even if penalty is disabled
+            self.penalized_automatically_cancelled_flights.update(new_automatic_cancellations)
         
         # 8. Probability-aware shaping: reward resolving high-probability conflicts
         probability_resolution_bonus = 0
         resolved_probability_total = 0
         tail_swap_resolved_conflict = False  # Track if this tail swap resolved a conflict
-        if (PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED 
-            and resolved_conflicts 
-            and PROBABILITY_RESOLUTION_BONUS_SCALE > 0
+        
+        # Always check if tail swap resolved conflicts (for tracking), regardless of penalty flag
+        if (resolved_conflicts 
             and flight_action != 0
             and self.something_happened):
             for conflict in resolved_conflicts:
@@ -1606,30 +1625,36 @@ class AircraftDisruptionEnv(gym.Env):
                     aircraft_id = conflict
                     conflict_flight_id = None
 
+                # Only count conflicts directly resolved by the acted flight
                 if conflict_flight_id is None or conflict_flight_id != flight_action:
                     continue
+                # Do not count conflicts that were auto-cancelled by the environment
                 if conflict_flight_id in self.automatically_cancelled_flights:
                     continue
 
-                pre_prob = np.nan
-                if hasattr(self, "pre_action_probabilities"):
-                    pre_prob = self.pre_action_probabilities.get(aircraft_id, np.nan)
-                if np.isnan(pre_prob):
-                    pre_prob = self.unavailabilities_dict.get(aircraft_id, {}).get('Probability', np.nan)
-                if np.isnan(pre_prob):
-                    pre_prob = 1.0
-
-                resolved_probability_total += max(0.0, pre_prob)
-                
                 # If we got here, this action resolved a conflict
                 if self.tail_swap_happened:
                     tail_swap_resolved_conflict = True
+                
+                # Calculate probability for bonus (only if penalty is enabled)
+                if PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED and PROBABILITY_RESOLUTION_BONUS_SCALE > 0:
+                    pre_prob = np.nan
+                    if hasattr(self, "pre_action_probabilities"):
+                        pre_prob = self.pre_action_probabilities.get(aircraft_id, np.nan)
+                    if np.isnan(pre_prob):
+                        pre_prob = self.unavailabilities_dict.get(aircraft_id, {}).get('Probability', np.nan)
+                    if np.isnan(pre_prob):
+                        pre_prob = 1.0
 
+                    resolved_probability_total += max(0.0, pre_prob)
+
+        # Only apply bonus if penalty is enabled
+        if PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED and resolved_probability_total > 0:
             probability_resolution_bonus = resolved_probability_total * PROBABILITY_RESOLUTION_BONUS_SCALE
-            
-            # Track tail swaps that resolved conflicts (only if bonus was given)
-            if tail_swap_resolved_conflict and probability_resolution_bonus > 0:
-                self.scenario_wide_tail_swaps_resolving += 1
+        
+        # Always track tail swaps that resolved conflicts, regardless of penalty flag
+        if tail_swap_resolved_conflict:
+            self.scenario_wide_tail_swaps_resolving += 1
 
         # 9. Low-confidence action penalty
         low_confidence_action_penalty = 0
@@ -1719,8 +1744,9 @@ class AircraftDisruptionEnv(gym.Env):
             }
         }
         
-        # Add scenario-wide metrics ONLY when scenario ends (scenario_ended_flag is True)
+        # Add scenario-wide metrics ONLY when scenario ends
         # This saves memory by not storing metrics at every step
+        # Note: Metrics are saved regardless of whether penalty #6 is enabled
         if scenario_ended_flag:
             self.info_after_step["scenario_metrics"] = {
                 "delay_minutes": self.scenario_wide_delay_minutes,

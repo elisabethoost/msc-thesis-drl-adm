@@ -81,6 +81,8 @@ See end of this file **Installation Continued** for a guide on how to set up vir
 
 ### 2. Dataset Preparation
 
+**NOTE:** The data set used right now is 3ac-182-green16. I advise using this and not changing it at first. 
+
 Datasets are located in `Data/TRAINING/`. The naming convention is:
 - `{N}ac-{S}-{name}/`: N aircraft, M scnarios/schedules, Data Set name 
 - The number S indicates the number of scenarios (e.g., `3ac-182-green16` has 16 scenarios)
@@ -133,7 +135,7 @@ Example:
 ```bash
 python scripts/visualize_episode_detailed.py \
     results/model1_rf/training/m1_1/3ac-182-green16 \
-    proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"
+    proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
 ```
 
 This creates:
