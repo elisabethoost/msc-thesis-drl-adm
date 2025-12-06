@@ -507,20 +507,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.1e5)  # 0.03e5 = 3000 timesteps for proper convergence (increased from 200k)
-    # SEEDS = [232323, 242424]
-    SEEDS = [232323]
+    MAX_TOTAL_TIMESTEPS = int(0.5e5)  # 0.03e5 = 3000 timesteps for proper convergence (increased from 200k)
+    SEEDS = [232323, 242424]
+    # SEEDS = [232323]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model1_rf/training/m1_1"
+    save_folder = "results/model1_rf/training/m1_moba_1"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
-    # env_types = ['myopic', 'proactive', 'reactive']
-    env_types = ['proactive']  # Test only proactive environment
+    env_types = ['myopic', 'proactive', 'reactive']
+    # env_types = ['proactive']  # Test only proactive environment
 
     print(f"Temporal features enabled: {config.ENABLE_TEMPORAL_DERIVED_FEATURES} | "
           f"Derived features/aircraft: {config.DERIVED_FEATURES_PER_AIRCRAFT} | "
