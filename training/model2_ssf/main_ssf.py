@@ -52,9 +52,6 @@ def run_for_single_folder(training_folder, MAX_TOTAL_TIMESTEPS, single_seed, bru
         env_type=env_type,
     )
 
-    # Note: The rewards are already in the correct format (lists) and saved to disk
-    # No need to process them further here since they're saved during training
-    # Just return them for any subsequent processing if needed
     return
 
 def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cross_val_flag, early_stopping_flag, CROSS_VAL_INTERVAL, printing_intermediate_results, save_folder, TESTING_FOLDERS_PATH):

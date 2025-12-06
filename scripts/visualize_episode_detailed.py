@@ -16,7 +16,7 @@ Usage:
     
 Examples:
     # Model 1 (RF) - results/model1_rf/training/m1_1/3ac-182-green16
-    python scripts/visualize_episode_detailed.py results/model1_rf/training/m1_1/3ac-182-green16 proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"
+    python scripts/visualize_episode_detailed.py results/model1_rf/training/m1_2/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
     
     # Model 2 (SSF) - results/model2_ssf/training/m2_1/3ac-182-green16
     python scripts/visualize_episode_detailed.py results/model2_ssf/training/m2_1/3ac-182-green16 proactive 232323 0 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00051"

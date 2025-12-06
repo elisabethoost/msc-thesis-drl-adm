@@ -110,6 +110,75 @@ def find_max_flights_in_training_data(training_folders_path):
     return max_flights
 
 
+def find_max_flights_per_aircraft_in_training_data(training_folders_path):
+    """Scans all training scenarios to find the maximum number of flights per aircraft.
+    
+    This function recursively searches through all scenario folders in the training
+    data directory and finds the maximum number of flights per aircraft across all scenarios.
+    This is useful for optimizing Model 2 (SSF) state space size.
+    
+    Args:
+        training_folders_path (str): Path to the training data folder (e.g., 'Data/TRAINING/3ac-182-green16/')
+        
+    Returns:
+        int: Maximum number of flights per aircraft found across all scenarios, or None if no scenarios found
+    """
+    if not os.path.exists(training_folders_path):
+        print(f"Warning: Training folder path does not exist: {training_folders_path}")
+        return None
+    
+    max_flights_per_ac = 0
+    scenario_count = 0
+    
+    # Find all scenario folders (directories containing flights.csv and rotations.csv)
+    for root, dirs, files in os.walk(training_folders_path):
+        if 'flights.csv' in files and 'rotations.csv' in files:
+            scenario_count += 1
+            
+            # Load flights and rotations for this scenario
+            flights_file = os.path.join(root, 'flights.csv')
+            rotations_file = os.path.join(root, 'rotations.csv')
+            
+            try:
+                # Parse flights
+                flights_lines = read_csv_with_comments(flights_file)
+                flights_dict = FileParsers.parse_flights(flights_lines) if flights_lines else {}
+                
+                # Parse rotations
+                rotations_lines = read_csv_with_comments(rotations_file)
+                rotations_dict = FileParsers.parse_rotations(rotations_lines) if rotations_lines else {}
+                
+                # Count flights per aircraft
+                flights_per_aircraft = {}
+                for flight_id, rotation_info in rotations_dict.items():
+                    if flight_id in flights_dict:
+                        aircraft_id = rotation_info.get('Aircraft', None)
+                        if aircraft_id:
+                            if aircraft_id not in flights_per_aircraft:
+                                flights_per_aircraft[aircraft_id] = 0
+                            flights_per_aircraft[aircraft_id] += 1
+                
+                # Find max flights per aircraft in this scenario
+                if flights_per_aircraft:
+                    scenario_max = max(flights_per_aircraft.values())
+                    if scenario_max > max_flights_per_ac:
+                        max_flights_per_ac = scenario_max
+                        if DEBUG_MODE:
+                            print(f"New max per aircraft found: {max_flights_per_ac} flights in {root}")
+            except Exception as e:
+                print(f"Error processing scenario {root}: {e}")
+                continue
+    
+    if scenario_count == 0:
+        print(f"Warning: No scenarios found in {training_folders_path}")
+        return None
+    
+    print(f"Scanned {scenario_count} scenarios in {training_folders_path}")
+    print(f"Maximum flights per aircraft found: {max_flights_per_ac}")
+    
+    return max_flights_per_ac
+
+
 def parse_time_with_day_offset(time_str, reference_date):
     """
     Parses time and adds a day offset if '+1' is present, or if the arrival time 

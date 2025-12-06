@@ -48,40 +48,37 @@ def run_train_dqn_both_timesteps(
     TESTING_FOLDERS_PATH,
     env_type):
 
-    # print(f"Training on {stripped_scenario_folder} with {env_type} environment")
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
-    # Constants and Training Settings - FIXED FOR STABLE LEARNING
-    LEARNING_RATE = 0.0005                    # INCREASED from 0.0001 - agent needs faster learning to improve over time
-    GAMMA = 0.9999                            # Standard discount factor for future rewards.
+    # Constants and Training Settings
+    LEARNING_RATE = 0.0005                    
+    GAMMA = 0.9999                            
     BUFFER_SIZE = 100000                     # Increased buffer size for better experience replay
     BATCH_SIZE = 128                         # Standard batch size for stability
-    TARGET_UPDATE_INTERVAL = 100            # Less frequent target updates for stability
+    TARGET_UPDATE_INTERVAL = 100            
     NEURAL_NET_STRUCTURE = dict(net_arch=[256, 256*2, 256])
     
 
-    LEARNING_STARTS = 0                # More steps before training starts
-    TRAIN_FREQ = 20                          # INCREASED from 4 - train every step for faster learning
+    LEARNING_STARTS = 0                         
+    TRAIN_FREQ = 20                          
 
     # Episode termination settings
-    MAX_STEPS_PER_SCENARIO = 40             # Maximum steps per scenario (increased from 25 for more time to solve)
+    MAX_STEPS_PER_SCENARIO = 40            
 
-    # Exploration parameters - FIXED FOR STABLE LEARNING
+    # Exploration parameters
     EPSILON_START = 1.0                      # Starts with 100% random exploration
-    EPSILON_MIN = 0.15                        # Keep exploring 15% even late in training (increased from 0.025 for more exploration)
-    PERCENTAGE_MIN = 90                     # Decay over 95% of training (maintains long exploration period)
-    EPSILON_TYPE = "exponential"                 # Use exponential decay for gradual learning
+    EPSILON_MIN = 0.15                       # Keep exploring 15% even late in training (increased from 0.025 for more exploration)
+    PERCENTAGE_MIN = 90                      # Decay over 95% of training (maintains long exploration period)
+    EPSILON_TYPE = "exponential"             # Use exponential decay for gradual learning, use "mixed" for linear and exponential decay
     if EPSILON_TYPE == "linear":
         EPSILON_MIN = 0
-
-    N_EPISODES = 10                         # Reduced from 50
 
     starting_time = time.time()              # gives the time elapsed since 1970-01-01 00:00:00 UTC aka Unix epoch 
 
     # extract number of scenarios in training and testing folders
     num_scenarios_training = len(os.listdir(TRAINING_FOLDERS_PATH))
 
-    # Based on parameters, calculate EPSILON_DECAY_RATE as in original code
+    # Based on parameters, calculate EPSILON_DECAY_RATE
     if EPSILON_TYPE != "mixed":
         EPSILON_DECAY_RATE = calculate_epsilon_decay_rate(
             MAX_TOTAL_TIMESTEPS, EPSILON_START, EPSILON_MIN, PERCENTAGE_MIN, EPSILON_TYPE
@@ -93,25 +90,8 @@ def run_train_dqn_both_timesteps(
 
     # Initialize device
     device = initialize_device()
-
-    # Check device capabilities
     check_device_capabilities()
-
-    # Get device-specific information
     device_info = get_device_info(device)
-    # print(f"Device info: {device_info}")
-
-    # Verify training folders and gather training data
-    # returns a list of folders inside the specified path
-    training_folders = verify_training_folders(TRAINING_FOLDERS_PATH)
-
-    # Calculate training days and model naming
-    num_days_trained_on = calculate_training_days(N_EPISODES, training_folders)
-    # print(f"Training on {num_days_trained_on} days of data "
-    #       f"({N_EPISODES} episodes of {len(training_folders)} scenarios)")
-
-    formatted_days = format_days(num_days_trained_on)
-    MODEL_SAVE_PATH = f'../trained_models/dqn/'  
 
     # Create results directory
     results_dir = create_results_directory(append_to_name='dqn')
@@ -120,8 +100,8 @@ def run_train_dqn_both_timesteps(
     # create_new_id creates a new ID for the training run and adds it to the ids.json file
     # each time you run the main script, a new ID is created
     from scripts.logger import create_new_id, get_config_variables
-    # import src.config_rf as config  # Use the same config as the environment LOLL
-    import src.config_rf as config  # Use the same config as the environment
+
+    import src.config_rf as config # LOLL
     all_logs = {}
     def train_dqn_agent(env_type, seed):
         log_data = {}  # Main dictionary to store all logs
@@ -144,7 +124,6 @@ def run_train_dqn_both_timesteps(
             "model_type": "dqn",
             "training_id": training_id,
             "MODEL_SAVE_PATH": model_path,
-            "N_EPISODES": N_EPISODES,
             "num_scenarios_training": num_scenarios_training,
             "results_dir": results_dir,
             "CROSS_VAL_FLAG": cross_val_flag,

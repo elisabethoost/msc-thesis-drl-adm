@@ -216,7 +216,8 @@ def run_train_dqn_both_timesteps(
                     rotations_dict,
                     alt_aircraft_dict,
                     config_dict,
-                    env_type=env_type
+                    env_type=env_type,
+                    max_flights_per_aircraft=max_flights_per_ac
                 )
                 # Set the environment, but handle observation space mismatch gracefully
                 try:
@@ -297,7 +298,12 @@ def run_train_dqn_both_timesteps(
         alt_aircraft_dict = data_dict['alt_aircraft']
         config_dict = data_dict['config']
 
-        # Model 2: Use environment_ssf (no max_flights_total parameter)
+        # Model 2: Use environment_ssf with optimized max_flights_per_aircraft
+        max_flights_per_ac = find_max_flights_per_aircraft_in_training_data(TRAINING_FOLDERS_PATH)
+        if max_flights_per_ac is None:
+            max_flights_per_ac = MAX_FLIGHTS_PER_AIRCRAFT
+        # print(f"Using max_flights_per_aircraft: {max_flights_per_ac} for Model 2 optimization")
+        
         from src.environment_ssf import AircraftDisruptionEnv
         
         # Create a minimal environment first to get the correct observation space
@@ -308,7 +314,8 @@ def run_train_dqn_both_timesteps(
             rotations_dict,
             alt_aircraft_dict,
             config_dict,
-            env_type=env_type
+            env_type=env_type,
+            max_flights_per_aircraft=max_flights_per_ac
         )
         
         # Reset the environment to initialize the observation space
@@ -406,7 +413,8 @@ def run_train_dqn_both_timesteps(
                     rotations_dict,
                     alt_aircraft_dict,
                     config_dict,
-                    env_type=env_type
+                    env_type=env_type,
+                    max_flights_per_aircraft=max_flights_per_ac
                 )
                 model.set_env(env)
 
@@ -609,6 +617,7 @@ def run_train_dqn_both_timesteps(
                     # Extract penalty details from info dict
                     penalties_dict = info.get("penalties", {})
                     delay_penalty_total = penalties_dict.get("delay_penalty_total", 0.0)
+                    scenario_metrics = info.get("scenario_metrics", None)
                     cancel_penalty = penalties_dict.get("cancel_penalty", 0.0)
                     inaction_penalty = penalties_dict.get("inaction_penalty", 0.0)
                     automatic_cancellation_penalty = penalties_dict.get("automatic_cancellation_penalty", 0.0)
@@ -701,6 +710,10 @@ def run_train_dqn_both_timesteps(
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_reward"] = total_reward_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_steps"] = timesteps_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["episode_ended_reason"] = "max_steps_reached" if max_steps_reached else "natural_termination"
+                
+                # Only store scenario metrics if they exist (i.e., scenario ended properly with penalty #6)
+                if scenario_metrics is not None:
+                    detailed_episode_data[episode]["scenarios"][scenario_folder]["final_scenario_metrics"] = scenario_metrics
 
             # Perform cross-validation if enabled
             if cross_val_flag:

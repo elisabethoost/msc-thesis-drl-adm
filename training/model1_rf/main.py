@@ -52,9 +52,6 @@ def run_for_single_folder(training_folder, MAX_TOTAL_TIMESTEPS, single_seed, bru
         env_type=env_type
     )
 
-    # Note: The rewards are already in the correct format (lists) and saved to disk
-    # No need to process them further here since they're saved during training
-    # Just return them for any subsequent processing if needed
     return
 
 def aggregate_results_and_plot(SEEDS, MAX_TOTAL_TIMESTEPS, brute_force_flag, cross_val_flag, early_stopping_flag, CROSS_VAL_INTERVAL, printing_intermediate_results, save_folder, TESTING_FOLDERS_PATH):
@@ -498,7 +495,6 @@ def save_experiment_parameters(save_results_big_run, MAX_TOTAL_TIMESTEPS):
     
     print(f"Human-readable parameters saved to: {txt_file}")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--training_folder", type=str, help="Path to a single training folder")
@@ -507,7 +503,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.5e5)  # 0.03e5 = 3000 timesteps for proper convergence (increased from 200k)
+    MAX_TOTAL_TIMESTEPS = int(0.5e5)  
     SEEDS = [232323, 242424]
     # SEEDS = [232323]
     brute_force_flag = False
@@ -515,7 +511,7 @@ if __name__ == "__main__":
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model1_rf/training/m1_moba_1"
+    save_folder = "results/model1_rf/training/m1_2"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
@@ -541,14 +537,6 @@ if __name__ == "__main__":
         # "Data/TRAINING/6ac-65-yellow"
         ]
             
-    # Save all hyperparameters and configuration for reproducibility
-    # Extract scenario folder name and create parameters directory
-    # parameters_folder = all_folders_temp[0]
-    # stripped_parameters_folder = parameters_folder.strip("/").split("/")[-1]
-    # save_parameters_folder = f"{save_folder}/{stripped_parameters_folder}/parameters"
-    
-    # save_experiment_parameters(save_parameters_folder, MAX_TOTAL_TIMESTEPS)
-
     # main.py considers 3 different scenarios: 
     # 1. no seed or training folder, 2. seed and training folder, 3. seed and no training folder
     # Case 1/3

@@ -8,7 +8,6 @@ import torch as th
 import math
 import json
 
-
 # File reader with comment filtering
 def read_csv_with_comments(file_path):
     """Reads a CSV file and skips comment lines (lines starting with '%') and stops at '#'."""
@@ -69,28 +68,10 @@ def load_scenario_data(scenario_folder):
         else:
             data_dict[file_type] = None
 
-    # # Fix the alt_aircraft file: if the arrival time is before the departure time, add 24 hours to the arrival time
-    # if data_dict['alt_aircraft']:
-    #     print(f"Fixing alt_aircraft file")
-    #     print(data_dict['alt_aircraft'])
-    #     """
-    #     data_dict['alt_aircraft'] is of this form:
-    #     {'A320#1': {'StartDate': '14/09/24', 'StartTime': '08:02', 'EndDate': '14/09/24', 'EndTime': '23:29', 'Probability': 0.17}, 'A320#2': {'StartDate': '14/09/24', 'StartTime': '08:15', 'EndDate': '14/09/24', 'EndTime': '13:13', 'Probability': 0.31}, 'A320#3': {'StartDate': '14/09/24', 'StartTime': '08:12', 'EndDate': '14/09/24', 'EndTime': '15:54', 'Probability': 0.0}}
-    #     """
-    #     for aircraft in data_dict['alt_aircraft']:
-    #         for flight in data_dict['alt_aircraft'][aircraft]:
-    #             deptime = data_dict['alt_aircraft'][aircraft]['StartTime']
-    #             print(f"deptime: {deptime}")
-    #             arrtime = data_dict['alt_aircraft'][aircraft]['EndTime']
-    #             print(f"arrtime: {arrtime}")
-    #             if arrtime < deptime:
-    #                 # add one day to the end date
-    #                 data_dict['alt_aircraft'][aircraft]['EndDate'] = (datetime.strptime(data_dict['alt_aircraft'][aircraft]['EndDate'], '%d/%m/%y') + timedelta(days=1)).strftime('%d/%m/%y')
     return data_dict
 
 # Clear file content
 def clear_file(file_name):
-    """Clears the content of a file."""
     with open(file_name, 'w') as file:
         file.write('')
 
@@ -336,24 +317,6 @@ class FileParsers:
                 'Probability': float(parts[5]) # original code
             }
         return alt_aircraft_dict
-    
-    # @staticmethod
-    # def parse_alt_aircraft(data_lines):
-    #     """Parses the alt_aircraft file into a dictionary."""
-    #     if data_lines is None:
-    #         return {}
-
-    #     alt_aircraft_dict = {}
-    #     for line in data_lines:
-    #         parts = re.split(r'\s+', line)
-    #         alt_aircraft_dict[parts[0]] = {
-    #             'StartDate': parts[1],
-    #             'StartTime': parts[2],
-    #             'EndDate': parts[3],
-    #             'EndTime': parts[4],
-    #             'Probability': float(parts[5])
-    #         }
-    #     return alt_aircraft_dict
 
 
     @staticmethod
@@ -377,7 +340,6 @@ class FileParsers:
                 'Arr/h': int(parts[6])
             })
         return alt_airports_dict
-
 
 
 # Data Processing Function
@@ -493,28 +455,6 @@ def save_best_and_worst_to_csv(scenario_folder, model_name, worst_actions, best_
 import subprocess
 import platform
 
-
-def get_macbook_info():
-    model_info = subprocess.run(["system_profiler", "SPHardwareDataType"], capture_output=True, text=True)
-    output = model_info.stdout
-    
-    # Extract relevant information
-    model_name = re.search(r"Model Name: (.*)", output)
-    chip = re.search(r"Chip: (.*)", output)
-    total_cores = re.search(r"Total Number of Cores: (.*)", output)
-    memory = re.search(r"Memory: (.*)", output)
-    
-    info = {
-        "Model Name": model_name.group(1) if model_name else "Unknown",
-        "Chip": chip.group(1) if chip else "Unknown",
-        "Total Cores": total_cores.group(1) if total_cores else "Unknown",
-        "Memory": memory.group(1) if memory else "Unknown"
-    }
-    
-    return info
-
-
-
 def get_gpu_info():
     if platform.system() == "Darwin":  # macOS
         gpu_info = subprocess.run(["system_profiler", "SPDisplaysDataType"], capture_output=True, text=True)
@@ -540,7 +480,6 @@ def get_gpu_info():
         return "Unsupported OS"
 
 
-
 def get_l40s_info():
     # Querying memory usage, GPU utilization, temperature, etc.
     gpu_info = subprocess.run(
@@ -562,12 +501,6 @@ def get_l40s_info():
         }
     else:
         return "No detailed information available or `nvidia-smi` not available."
-
-
-
-# device_info = get_l40s_info()
-# print("Detailed GPU Info:", device_info)
-
 
 def initialize_device():
     """Initialize and return the computation device."""
@@ -631,11 +564,6 @@ def verify_training_folders(path):
         folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))
     ]
     return training_folders
-
-
-def calculate_training_days(n_episodes, folders):
-    """Calculate total training days."""
-    return n_episodes * len(folders)
 
 
 def format_days(days):

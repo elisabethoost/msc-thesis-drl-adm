@@ -302,7 +302,7 @@ def run_train_dqn_both_timesteps(
         max_flights = find_max_flights_in_training_data(TRAINING_FOLDERS_PATH)
         if max_flights is None:
             max_flights = MAX_AIRCRAFT * MAX_FLIGHTS_PER_AIRCRAFT
-        print(f"Using max_flights_total: {max_flights} for Model 3 optimization")
+        # print(f"Using max_flights_total: {max_flights} for Model 3 optimization")
 
         from src.environment_ssf_large_dimensions import AircraftDisruptionEnv
         
@@ -628,6 +628,7 @@ def run_train_dqn_both_timesteps(
                     scenario_ended = info.get("scenario_ended", False)  # Get scenario_ended flag
                     penalty_flags = info.get("penalty_flags", {})  # Get penalty enable flags
                     delay_penalty_minutes = info.get("delay_penalty_minutes", 0)  # Get delay minutes for display
+                    scenario_metrics = info.get("scenario_metrics", None)
                     
                     # Get decoded action from info dict (stored by env.step) if available
                     # This ensures we use the actual action that was executed, not re-decode after flights may have been removed
@@ -708,6 +709,10 @@ def run_train_dqn_both_timesteps(
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_reward"] = total_reward_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["total_steps"] = timesteps_local
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["episode_ended_reason"] = "max_steps_reached" if max_steps_reached else "natural_termination"
+                
+                # Only store scenario metrics if they exist (i.e., scenario ended properly with penalty #6)
+                if scenario_metrics is not None:
+                    detailed_episode_data[episode]["scenarios"][scenario_folder]["final_scenario_metrics"] = scenario_metrics
 
             # Perform cross-validation if enabled
             if cross_val_flag:

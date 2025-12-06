@@ -58,12 +58,13 @@ class AircraftDisruptionEnv(gym.Env):
         self.max_time_intervals = MAX_TIME_INTERVALS  # 96 intervals (24 hours / 15 minutes)
         
         # Use dynamic max_flights_total if provided, otherwise use default
+        # Note: Training script (train_dqn_modular_ssf_large_dimensions.py) already handles the fallback,
+        # so this is mainly for defensive programming if environment is created directly
         if max_flights_total is not None:
             self.max_flights_total = max_flights_total
-            # print(f"Using optimized max_flights_total: {self.max_flights_total} (instead of {MAX_AIRCRAFT * MAX_FLIGHTS_PER_AIRCRAFT})")
         else:
+            # Fallback: use default if not provided (training script should always provide this)
             self.max_flights_total = MAX_AIRCRAFT * MAX_FLIGHTS_PER_AIRCRAFT
-            # print(f"Using default max_flights_total: {self.max_flights_total} (MAX_AIRCRAFT × MAX_FLIGHTS_PER_AIRCRAFT)")
         
         self.config_dict = config_dict
 
@@ -176,10 +177,17 @@ class AircraftDisruptionEnv(gym.Env):
         # Initialize scenario tracking
         self.eligible_flights_for_resolved_bonus = self.get_initial_conflicts()
         self.scenario_wide_delay_minutes = 0
+        self.scenario_wide_delay_count = 0
         self.scenario_wide_cancelled_flights = 0
+        self.scenario_wide_automatically_cancelled_count = 0
         self.scenario_wide_steps = 0
         self.scenario_wide_resolved_conflicts = 0
+        self.scenario_wide_resolved_initial_conflicts = 0
+        self.scenario_wide_disruption_resolved_to_zero_count = 0
         self.scenario_wide_tail_swaps = 0
+        self.scenario_wide_tail_swaps_resolving = 0
+        self.scenario_wide_tail_swaps_inefficient = 0
+        self.scenario_wide_inaction_count = 0
         self.scenario_wide_initial_disrupted_flights_list = self.get_current_conflicts()
         self.scenario_wide_actual_disrupted_flights = len(self.get_current_conflicts())
 
@@ -1486,6 +1494,8 @@ class AircraftDisruptionEnv(gym.Env):
             for flight_id in self.environment_delayed_flights
         )
         self.scenario_wide_delay_minutes += delay_penalty_minutes
+        new_delayed_flights = len([fid for fid in self.environment_delayed_flights if self.environment_delayed_flights[fid] > self.penalized_delays.get(fid, 0)])
+        self.scenario_wide_delay_count += new_delayed_flights
         
         if PENALTY_1_DELAY_ENABLED:
             delay_minutes_above_threshold = max(0, delay_penalty_minutes - DELAY_PENALTY_THRESHOLD_MINUTES)
@@ -1511,6 +1521,8 @@ class AircraftDisruptionEnv(gym.Env):
         # 3. Inaction Penalty: Penalize doing nothing when conflicts exist
         if PENALTY_3_INACTION_ENABLED:
             inaction_penalty = NO_ACTION_PENALTY if flight_action == 0 and remaining_conflicts else 0
+            if inaction_penalty > 0:
+                self.scenario_wide_inaction_count += 1
         else:
             inaction_penalty = 0
 
@@ -1550,6 +1562,17 @@ class AircraftDisruptionEnv(gym.Env):
 
                 final_conflict_resolution_reward = final_resolved_count * RESOLVED_CONFLICT_REWARD
                 self.scenario_wide_resolved_conflicts += final_resolved_count
+                self.scenario_wide_resolved_initial_conflicts = final_resolved_count
+                
+                # Count disruptions resolved to zero (probability went from >0 to 0)
+                disruption_resolved_to_zero_count = 0
+                for aircraft_id in self.aircraft_ids:
+                    if (aircraft_id in self.scenario_wide_initial_disrupted_flights_list or 
+                        any(conflict[0] == aircraft_id if isinstance(conflict, tuple) else conflict == aircraft_id 
+                            for conflict in self.scenario_wide_initial_disrupted_flights_list)):
+                        if self.unavailabilities_dict[aircraft_id]['Probability'] == 0.00:
+                            disruption_resolved_to_zero_count += 1
+                self.scenario_wide_disruption_resolved_to_zero_count = disruption_resolved_to_zero_count
 
         # 7. Automatic cancellation of flights that have already departed
         if PENALTY_7_AUTO_CANCELLATION_ENABLED:
@@ -1559,6 +1582,7 @@ class AircraftDisruptionEnv(gym.Env):
             automatic_cancellation_penalty_count = len(new_automatic_cancellations)
             automatic_cancellation_penalty = automatic_cancellation_penalty_count * AUTOMATIC_CANCELLATION_PENALTY
             
+            self.scenario_wide_automatically_cancelled_count += automatic_cancellation_penalty_count
             self.scenario_wide_cancelled_flights += automatic_cancellation_penalty_count
             self.penalized_automatically_cancelled_flights.update(new_automatic_cancellations)
         else:
@@ -1568,6 +1592,7 @@ class AircraftDisruptionEnv(gym.Env):
         # 8. Probability-aware shaping: reward resolving high-probability conflicts
         probability_resolution_bonus = 0
         resolved_probability_total = 0
+        tail_swap_resolved_conflict = False  # Track if this tail swap resolved a conflict
         if (PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED 
             and resolved_conflicts 
             and PROBABILITY_RESOLUTION_BONUS_SCALE > 0
@@ -1595,8 +1620,16 @@ class AircraftDisruptionEnv(gym.Env):
                     pre_prob = 1.0
 
                 resolved_probability_total += max(0.0, pre_prob)
+                
+                # If we got here, this action resolved a conflict
+                if self.tail_swap_happened:
+                    tail_swap_resolved_conflict = True
 
             probability_resolution_bonus = resolved_probability_total * PROBABILITY_RESOLUTION_BONUS_SCALE
+            
+            # Track tail swaps that resolved conflicts (only if bonus was given)
+            if tail_swap_resolved_conflict and probability_resolution_bonus > 0:
+                self.scenario_wide_tail_swaps_resolving += 1
 
         # 9. Low-confidence action penalty
         low_confidence_action_penalty = 0
@@ -1613,6 +1646,9 @@ class AircraftDisruptionEnv(gym.Env):
             ):
                 low_confidence_action_penalty = LOW_CONFIDENCE_ACTION_PENALTY
 
+        if self.tail_swap_happened and not tail_swap_resolved_conflict:
+            self.scenario_wide_tail_swaps_inefficient += 1
+        
         # Reset tail swap tracking for next step
         self.tail_swap_happened = False
 
@@ -1682,6 +1718,34 @@ class AircraftDisruptionEnv(gym.Env):
                 "low_confidence_action_penalty": low_confidence_action_penalty
             }
         }
+        
+        # Add scenario-wide metrics ONLY when scenario ends (scenario_ended_flag is True)
+        # This saves memory by not storing metrics at every step
+        if scenario_ended_flag:
+            self.info_after_step["scenario_metrics"] = {
+                "delay_minutes": self.scenario_wide_delay_minutes,
+                "delay_count": self.scenario_wide_delay_count,
+                "cancelled_flights": self.scenario_wide_cancelled_flights,
+                "automatically_cancelled_count": self.scenario_wide_automatically_cancelled_count,
+                "tail_swaps_total": self.scenario_wide_tail_swaps,
+                "tail_swaps_resolving": self.scenario_wide_tail_swaps_resolving,
+                "tail_swaps_inefficient": self.scenario_wide_tail_swaps_inefficient,
+                "inaction_count": self.scenario_wide_inaction_count,
+                "resolved_initial_conflicts": self.scenario_wide_resolved_initial_conflicts,
+                "scenario_wide_disruption_resolved_to_zero_count": self.scenario_wide_disruption_resolved_to_zero_count,
+                "steps": self.scenario_wide_steps,
+                "reward_components": {
+                    "delay_penalty_total": self.scenario_wide_reward_components["delay_penalty_total"],
+                    "cancel_penalty": self.scenario_wide_reward_components["cancel_penalty"],
+                    "inaction_penalty": self.scenario_wide_reward_components["inaction_penalty"],
+                    "proactive_penalty": self.scenario_wide_reward_components.get("proactive_penalty", 0),
+                    "time_penalty": self.scenario_wide_reward_components["time_penalty"],
+                    "unresolved_conflict_penalty": self.scenario_wide_reward_components.get("unresolved_conflict_penalty", 0),
+                    "automatic_cancellation_penalty": self.scenario_wide_reward_components["automatic_cancellation_penalty"],
+                    "probability_resolution_bonus": self.scenario_wide_reward_components.get("probability_resolution_bonus", 0),
+                    "low_confidence_action_penalty": self.scenario_wide_reward_components["low_confidence_action_penalty"]
+                }
+            }
 
         return reward
     
