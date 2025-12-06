@@ -6,10 +6,11 @@
 This repository implements three Deep Q-Network (DQN) models for aircraft disruption management, each using a different state space formulation. The models learn to optimize airline operations during disruptions by making decisions about flight delays, cancellations, and aircraft tail swaps.\
 
 ## Repository Structure
-The Models: Model1, Model2, Model3 consist of 4 main scripts + utils files: 
-**Model1**: main.py, train_dqn_modular.py, environment_rf.py, config.py, utils.py
-**Model2**: main_ssf.py, train_dqn_modular_ssf.py, environment_ssf.py, config_ssf.py, utils_ssf.py
-**Model 3**: main_ssf_large_dimensions.py, train_dqn_large_dimensions.py, enviornment_ssf_largedimensions.py, config_ssf, utils_ssf_largedimensions.py
+The Models: Model1, Model2, Model3 consist of 4 main scripts + utils files:
+
+- **Model1**: main.py, train_dqn_modular.py, environment_rf.py, config.py, utils.py
+- **Model2**: main_ssf.py, train_dqn_modular_ssf.py, environment_ssf.py, config_ssf.py, utils_ssf.py
+- **Model 3**: main_ssf_large_dimensions.py, train_dqn_large_dimensions.py, enviornment_ssf_largedimensions.py, config_ssf, utils_ssf_largedimensions.py
 
 To run each model: use their respective main files!
 
@@ -37,15 +38,15 @@ msc-thesis-drl-adm/
 │   ├── utils_ssf_large_dimensions.py           # Utilities for Model 3
 │   ├── visualize_episode_detailed.py           # Detailed episode visualization
 │   ├── visualize_episode_metrics.py            # Episode metrics visualization
-│   └── create_data.py          # Dataset creation script
+│   └── create_data.py                          # Dataset creation script
 ├── Data/                       # Training and test datasets
-│   ├── TRAINING/               # Training scenarios
-│   │   ├── 3ac-182-green16/   # Example: 3 aircraft, 182 flights, 16 scenarios
-│   │   └── 3ac-130-green/     # Example: 3 aircraft, 130 flights
-│   └── Template/               # Template for creating new datasets
+│   ├── TRAINING/                               # Training scenarios
+│   │   ├── 3ac-182-green16/                    # Example: 3 aircraft, 182 scenarios/schedules, max flight per ac set to 16 here
+│   │   └── 3ac-130-green/                      # Example: 3 aircraft, 130 scenarios/schedules
+│   └── Template/               
 └── results/                    # Training results (structure preserved, files ignored)
     ├── model1_rf/
-    │   ├── training/
+    │   ├── training/           
     │   ├── inference/
     │   └── analysis/
     ├── model2_ssf/
@@ -65,7 +66,7 @@ The three models differ in their state space representation:
 | Model | State Space Structure | Dimensions | Description |
 |-------|----------------------|------------|-------------|
 | **Model 1 (RF)** | Single matrix: `(MAX_AIRCRAFT + 1) × (3 + 3×MAX_FLIGHTS_PER_AIRCRAFT)` | 456 | (3+1) × (3 + 3×17) = 4×54 = 216 base elements. Row 0: time info, Rows 1-3: unavailability (prob, start, end) + flight info (id, dep, arr) per flight. With temporal features (3 aircraft × 4 features = 12) and observation stacking (OBS_STACK_SIZE=2): (216+12)×2 = 456 final dimensions. |
-| **Model 2 (SSF)** | Two matrices: `ac_mtx` + `flight_features` | ~1,549 | `ac_mtx`: 6×96 (aircraft unavailability), `flight_features`: 6×80 (compact flight representation per aircraft). Fixed dimensions. |
+| **Model 2 (SSF)** | Two matrices: `ac_mtx` + `flight_features` | ~1,536 | `ac_mtx`: 6×96 (aircraft unavailability over 15-min time intervals - stores probabilities). `flight_features`: 6×80 (6 aircraft × 20 flights × 4 features: flight_id, dep_interval_index, arr_interval_index, status). Note: `ac_mtx` uses time intervals (probability per interval), while `flight_features` stores flight data directly (not a time-interval matrix). Currently fixed to 20 flights per aircraft (could be optimized to actual max 13 like Model 3). |
 | **Model 3 (SSF Large)** | Two matrices: `ac_mtx` + `fl_mtx` | Variable | `ac_mtx`: 3×96 (288 elements), `fl_mtx`: Variable rows × 97. Currently optimized to 13 rows (max flights per aircraft in current dataset) × 97 = 1,261 elements. Total: 288 + 1,261 = 1,549. More detailed flight schedule representation. |
 
 **Key Differences:**
