@@ -31,7 +31,7 @@ class AircraftDisruptionEnv(gym.Env):
         
         # Constants for environment configuration
         self.max_aircraft = MAX_AIRCRAFT
-        self.columns_state_space = COLUMNS_STATE_SPACE + 1  # Adjust for new format (probability + start/end times + flights)
+        self.columns_state_space = COLUMNS_STATE_SPACE  # 3 + 3*MAX_FLIGHTS_PER_AIRCRAFT (unavailability info + flight info per flight)
         self.rows_state_space = ROWS_STATE_SPACE
 
         self.config_dict = config_dict

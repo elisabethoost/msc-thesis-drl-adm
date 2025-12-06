@@ -1,28 +1,16 @@
 import numpy as np
 
 # General Environment Settings
-MAX_AIRCRAFT = 3  # Maximum aircraft considered in the environment
-MAX_FLIGHTS_PER_AIRCRAFT = 17  # Maximum number of flights per aircraft
-ROWS_STATE_SPACE = 1 + MAX_AIRCRAFT  
-
-# Time-based state space calculation
-# Maximum recovery period: 24 hours in 15-minute intervals
-MAX_RECOVERY_HOURS = 24  # Maximum recovery period in hours
-MAX_RECOVERY_INTERVALS = (MAX_RECOVERY_HOURS * 60) // 15  
-MAX_TIME_INTERVALS = MAX_RECOVERY_INTERVALS
-COLUMNS_STATE_SPACE = MAX_TIME_INTERVALS  
+MAX_AIRCRAFT = 3  
+MAX_FLIGHTS_PER_AIRCRAFT = 17  
+ROWS_STATE_SPACE = 1 + MAX_AIRCRAFT 
+COLUMNS_STATE_SPACE = 3 + 3 * MAX_FLIGHTS_PER_AIRCRAFT  
 
 # Calculate the flattened action space size
 ACTION_SPACE_SIZE = (MAX_AIRCRAFT + 1) * (MAX_FLIGHTS_PER_AIRCRAFT + 1)  # Number of possible actions (+1 for the zero for no action and cancellations)
 
-
-# Data Generation Settings
-DEPARTURE_AFTER_END_RECOVERY = 2 # how many hours after the end of the recovery period can a generated flight depart
-
-# Time Settings for intervals
-TIMESTEP_HOURS = 1  # Length of each timestep in hours
-
-
+DEPARTURE_AFTER_END_RECOVERY = 2 
+TIMESTEP_HOURS = 1 
 DUMMY_VALUE = -999  # Dummy value for padding
 
 # ============================================================================
@@ -32,9 +20,9 @@ DUMMY_VALUE = -999  # Dummy value for padding
 # ============================================================================
 
 # EPISODE-END PENALTIES (applied at termination)
-UNRESOLVED_CONFLICT_PENALTY = 50.0    # -100 per initial conflict NOT properly resolved
+UNRESOLVED_CONFLICT_PENALTY = 50.0      # -50 per initial conflict NOT properly resolved
                                         # "Properly resolved" = prob=1.00, not cancelled, not auto-cancelled
-                                        # This is the BIG penalty that drives learning
+                                        # BIG penalty that drives learning
 
 # PER-STEP PENALTIES (applied during episode)
 TIME_MINUTE_PENALTY = 0.0001           # -0.006 per step (60 min * 0.0001)
