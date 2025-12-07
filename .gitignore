@@ -71,6 +71,9 @@ results/**/*
 # Un-ignore Model 3's m3_2 training results (track all contents)
 !results/model3_ssf_large/training/m3_2/
 !results/model3_ssf_large/training/m3_2/**
+# Un-ignore Model 1's m1_AllRewardsEnabled training results (example output)
+!results/model1_rf/training/m1_AllRewardsEnabled/
+!results/model1_rf/training/m1_AllRewardsEnabled/**
 
 # Logs
 logs/**/*.log

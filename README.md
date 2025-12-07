@@ -157,6 +157,31 @@ python scripts/visualize_episode_metrics.py
 
 This creates comprehensive metrics plots comparing all scenarios in the specified episodes.
 
+### Example Results Directory
+
+The repository includes an **example results directory** (`results/model1_rf/training/m1_AllRewardsEnabled/`) that demonstrates what the output looks like after running training on Model 1. This directory contains:
+
+- **Detailed episode data** (`detailed_episodes/*.pkl`): Step-by-step information for all episodes
+- **Trained models** (`*.zip`): Saved model checkpoints
+- **Plots** (`plots/*.png`): Reward curves showing training progress
+- **Visualizations** (`visualizations/`): Example outputs from `visualize_episode_detailed.py`
+
+You can use this example directory to try out the visualization scripts without running training first:
+
+```bash
+# Example: Visualize a specific episode and scenario from the example results
+python scripts/visualize_episode_detailed.py \
+    results/model1_rf/training/m1_AllRewardsEnabled/3ac-182-green16 \
+    proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
+```
+
+This will generate visualizations showing:
+- Initial schedule state
+- Each step's action, reward breakdown, and schedule changes
+- Final scenario statistics (delays, cancellations, tail swaps, etc.)
+
+**Note:** The example results are included in the repository as a reference. Your own training results will be saved in similar directory structures but will not be tracked by Git (except for this example directory).
+
 ## Model Components
 
 Each model consists of:
