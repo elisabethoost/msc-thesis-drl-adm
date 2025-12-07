@@ -503,7 +503,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.5e5)  
+    MAX_TOTAL_TIMESTEPS = int(0.3e5)  
     SEEDS = [232323, 242424]
     # SEEDS = [232323]
     brute_force_flag = False
@@ -511,7 +511,7 @@ if __name__ == "__main__":
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model1_rf/training/m1_2"
+    save_folder = "results/model1_rf/training/m1_AllRewardsEnabled_1"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types

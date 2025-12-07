@@ -245,11 +245,21 @@ class AircraftDisruptionEnv(gym.Env):
                 break
 
             # Check for unavailabilities
+            # Priority: Use unavailabilities_dict if it exists (updated by process_uncertainties)
+            # Otherwise fall back to alt_aircraft_dict or uncertain_breakdowns
             breakdown_probability = 0.0
             unavail_start_minutes = np.nan
             unavail_end_minutes = np.nan
             
-            if aircraft_id in self.alt_aircraft_dict:
+            if aircraft_id in self.unavailabilities_dict and self.unavailabilities_dict[aircraft_id].get('StartTime') is not None:
+                # Use updated probability from unavailabilities_dict (source of truth after process_uncertainties)
+                unavail_info = self.unavailabilities_dict[aircraft_id]
+                breakdown_probability = unavail_info['Probability']
+                unavail_start_time = unavail_info['StartTime']
+                unavail_end_time = unavail_info['EndTime']
+                unavail_start_minutes = (unavail_start_time - self.earliest_datetime).total_seconds() / 60
+                unavail_end_minutes = (unavail_end_time - self.earliest_datetime).total_seconds() / 60
+            elif aircraft_id in self.alt_aircraft_dict:
                 unavails = self.alt_aircraft_dict[aircraft_id]
                 if not isinstance(unavails, list):
                     unavails = [unavails]
@@ -406,7 +416,7 @@ class AircraftDisruptionEnv(gym.Env):
         padded_fl_mtx = np.zeros((MAX_FLIGHTS_TOTAL_FIXED, MAX_TIME_INTERVALS_FIXED + 1), dtype=np.float32)
         padded_fl_mtx[:, 0] = -1  # Initialize aircraft index column
         padded_fl_mtx[:fl_mtx.shape[0], :min(fl_mtx.shape[1], MAX_TIME_INTERVALS_FIXED + 1)] = fl_mtx[:, :min(fl_mtx.shape[1], MAX_TIME_INTERVALS_FIXED + 1)]
-        
+
         # Cache the result
         self._cached_state = (padded_ac_mtx, padded_fl_mtx)
         
@@ -1529,9 +1539,23 @@ class AircraftDisruptionEnv(gym.Env):
         
         # Only apply penalty if enabled
         if PENALTY_3_INACTION_ENABLED:
-            inaction_penalty = NO_ACTION_PENALTY if flight_action == 0 and remaining_conflicts else 0
+            if flight_action == 0 and remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY  # -10 penalty when conflicts remain
+            elif flight_action == 0 and not remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY/2  # -5 penalty when no conflicts remain
+            else:
+                inaction_penalty = 0
         else:
             inaction_penalty = 0
+
+        if DEBUG_MODE_REWARD:
+            status = "ENABLED" if PENALTY_3_INACTION_ENABLED else "DISABLED"
+            if inaction_penalty > 0:
+                print(f"  [Penalty #3: {status}] -{inaction_penalty} penalty for inaction (0,0) with {len(remaining_conflicts)} remaining conflicts")
+            elif flight_action == 0 and not remaining_conflicts:
+                print(f"  [Penalty #3: {status}] No inaction penalty (no conflicts remain - waiting for probabilities to resolve is fine)")
+            else:
+                print(f"  [Penalty #3: {status}] No inaction penalty (action was not 0,0)")
 
         # 4. Proactive Penalty: Fixed penalty for acting too close to departure
         proactive_penalty = 0

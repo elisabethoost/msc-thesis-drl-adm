@@ -361,12 +361,12 @@ def run_train_dqn_both_timesteps(
             print("[WARNING] Model is using CPU (no GPU available)")
 
         # Initialize training variables
-        total_timesteps = 0
-        episode_start = 0
-        rewards = {}
-        test_rewards = []
-        epsilon_values = []
-        epsilon = EPSILON_START
+                    total_timesteps = 0
+                    episode_start = 0
+                    rewards = {}
+                    test_rewards = []
+                    epsilon_values = []
+                    epsilon = EPSILON_START
 
         episode = episode_start
         while total_timesteps < MAX_TOTAL_TIMESTEPS:

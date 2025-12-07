@@ -230,8 +230,19 @@ class AircraftDisruptionEnv(gym.Env):
             if idx >= self.max_aircraft:
                 break
 
-            # Check for predefined unavailabilities and assign actual probability         
-            if aircraft_id in self.alt_aircraft_dict:
+            # Check for predefined unavailabilities and assign actual probability
+            # Priority: Use unavailabilities_dict if it exists (updated by process_uncertainties)
+            # Otherwise fall back to alt_aircraft_dict or uncertain_breakdowns
+            if aircraft_id in self.unavailabilities_dict and 'StartColumn' in self.unavailabilities_dict[aircraft_id]:
+                # Use updated probability from unavailabilities_dict (source of truth after process_uncertainties)
+                unavail_info = self.unavailabilities_dict[aircraft_id]
+                breakdown_probability = unavail_info['Probability']
+                start_col = unavail_info['StartColumn']
+                end_col = unavail_info['EndColumn']
+                # Convert column indices back to minutes for consistency
+                unavail_start_minutes = start_col * interval_minutes
+                unavail_end_minutes = end_col * interval_minutes
+            elif aircraft_id in self.alt_aircraft_dict:
                 unavails = self.alt_aircraft_dict[aircraft_id] # list of unavailabilities for the aircraft e.g. [{'StartDate': '01/07/25', 'StartTime': '00:00', 'EndDate': '01/07/25', 'EndTime': '00:00', 'Probability': 1.0}]
                 if not isinstance(unavails, list):
                     unavails = [unavails]
@@ -1608,13 +1619,23 @@ class AircraftDisruptionEnv(gym.Env):
         
         # Only apply penalty if enabled
         if PENALTY_3_INACTION_ENABLED:
-            inaction_penalty = NO_ACTION_PENALTY if flight_action == 0 and remaining_conflicts else 0
+            if flight_action == 0 and remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY 
+            elif flight_action == 0 and not remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY/2 
+            else:
+                inaction_penalty = 0
         else:
             inaction_penalty = 0
 
         if DEBUG_MODE_REWARD:
             status = "ENABLED" if PENALTY_3_INACTION_ENABLED else "DISABLED"
-            print(f"  [Penalty #3: {status}] -{inaction_penalty} penalty for inaction with remaining conflicts")
+            if inaction_penalty > 0:
+                print(f"  [Penalty #3: {status}] -{inaction_penalty} penalty for inaction (0,0) with {len(remaining_conflicts)} remaining conflicts")
+            elif flight_action == 0 and not remaining_conflicts:
+                print(f"  [Penalty #3: {status}] No inaction penalty (no conflicts remain - waiting for probabilities to resolve is fine)")
+            else:
+                print(f"  [Penalty #3: {status}] No inaction penalty (action was not 0,0)")
 
         # 4. Proactive Penalty: Fixed penalty for acting too close to departure
         proactive_penalty = 0

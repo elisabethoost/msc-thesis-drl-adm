@@ -1605,8 +1605,12 @@ class AircraftDisruptionEnv(gym.Env):
         
         # Only apply penalty if enabled
         if PENALTY_3_INACTION_ENABLED:
-            inaction_penalty = NO_ACTION_PENALTY if (flight_action == 0 and remaining_conflicts) else 0
-            inaction_penalty = NO_ACTION_PENALTY/2 if (flight_action == 0 and not remaining_conflicts) else 0
+            if flight_action == 0 and remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY  
+            elif flight_action == 0 and not remaining_conflicts:
+                inaction_penalty = NO_ACTION_PENALTY/2  
+            else:
+                inaction_penalty = 0
         else:
             inaction_penalty = 0
 
@@ -1704,12 +1708,14 @@ class AircraftDisruptionEnv(gym.Env):
                         and flight_id not in self.automatically_cancelled_flights):
                         resolved_count += 1
                         resolved_flights.append(flight_id)
-                    elif (self.unavailabilities_dict[aircraft_id]['Probability'] == 0.00
-                        and flight_id not in self.cancelled_flights 
-                        and flight_id not in self.automatically_cancelled_flights):
+                    elif (self.unavailabilities_dict[aircraft_id]['Probability'] == 0.00 
+                          or self.unavailabilities_dict[aircraft_id]['Probability'] is None
+                          or (isinstance(self.unavailabilities_dict[aircraft_id]['Probability'], (int, float)) 
+                              and np.isnan(self.unavailabilities_dict[aircraft_id]['Probability']))):
                         disruption_resolved_to_zero_count += 1
                     else:
-                        # Unresolved = still uncertain OR cancelled OR auto-cancelled
+                        # Not properly resolved = prob=1.00 BUT cancelled or auto-cancelled (instead of swapped)
+                        # Note: check_termination_criteria ensures all probabilities are resolved (0 or 1) and no conflicts exist
                         unresolved_count += 1
                         unresolved_flights.append(flight_id)
 

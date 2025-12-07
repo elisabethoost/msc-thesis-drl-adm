@@ -511,7 +511,7 @@ if __name__ == "__main__":
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model2_ssf/training/m2_2"
+    save_folder = "results/model2_ssf/training/m2_AllRewardsEnabled"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
