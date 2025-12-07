@@ -1,5 +1,7 @@
 # Deep Reinforcement Learning for Aircraft Disruption Management
 
+> **Repository Usage Notice:** This repository is public for educational purposes. **Please do not directly edit or push to this repository.** If you want to make changes, please [fork the repository](https://docs.github.com/en/get-started/quickstart/fork-a-repo) first.
+
 **Note:** This repository uses the `action-logicII` branch as the main branch to consider. All models share the same reward structure, but **Model 1 has a solely negative reward structure** for debug purposes (discussed with Marta).
 
 ## Overview
