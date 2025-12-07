@@ -1201,7 +1201,11 @@ class AircraftDisruptionEnv(gym.Env):
                     flight_features[ac_idx, col_start + 2] = float(new_arr_interval)
 
     def remove_flight(self, flight_id):
-        """Removes the specified flight from the dictionaries. Adds it to the cancelled_flights set."""
+        """Removes the specified flight from the dictionaries. Adds it to the automatically_cancelled_flights set.
+        
+        This method is called when flights are automatically cancelled (e.g., when they have already departed
+        and overlap with a confirmed unavailability). These should be tracked separately from manual cancellations.
+        """
         # Remove from flights_dict
         if flight_id in self.flights_dict:
             del self.flights_dict[flight_id]
@@ -1210,8 +1214,9 @@ class AircraftDisruptionEnv(gym.Env):
         if flight_id in self.rotations_dict:
             del self.rotations_dict[flight_id]
 
-        # Mark the flight as canceled
-        self.cancelled_flights.add(flight_id)
+        # Mark the flight as automatically cancelled (not manually cancelled)
+        # This distinguishes automatic cancellations (due to unavailability) from manual cancellations (by agent action)
+        self.automatically_cancelled_flights.add(flight_id)
     
     def get_current_conflicts(self):
         """Retrieves the current conflicts in the environment using matrix-based approach.
@@ -1755,18 +1760,35 @@ class AircraftDisruptionEnv(gym.Env):
             and self.something_happened):  # Action must have changed the state
             for conflict in resolved_conflicts:
                 # Handle both 2-tuple (aircraft_id, flight_id) and 4-tuple (aircraft_id, flight_id, flight_dep, flight_arr) formats
+                # Note: In Model 2, conflicts are stored as (ac_idx, flight_id, ...) where ac_idx is an integer
                 if isinstance(conflict, (tuple, list)) and len(conflict) >= 2:
-                    aircraft_id = conflict[0]
+                    aircraft_identifier = conflict[0]  # Could be integer index or string aircraft_id
                     conflict_flight_id = conflict[1]
                 else:
-                    aircraft_id = conflict
+                    aircraft_identifier = conflict
                     conflict_flight_id = None
+
+                # Convert aircraft identifier to aircraft_id string if it's an integer index
+                # Conflicts in Model 2 use ac_idx (integer), but pre_action_probabilities uses aircraft_id (string)
+                if isinstance(aircraft_identifier, (int, np.integer)):
+                    # Convert integer index to aircraft_id string
+                    # Try ac_mtx_idx_to_aircraft_id first, then fallback to aircraft_ids list
+                    aircraft_id = self.ac_mtx_idx_to_aircraft_id.get(aircraft_identifier)
+                    if aircraft_id is None:
+                        # Fallback: use aircraft_ids list if index is valid
+                        if 0 <= aircraft_identifier < len(self.aircraft_ids):
+                            aircraft_id = self.aircraft_ids[aircraft_identifier]
+                        else:
+                            # Invalid index, skip this conflict
+                            continue
+                else:
+                    aircraft_id = aircraft_identifier  # Already a string
 
                 # Only count conflicts directly resolved by the acted flight
                 if conflict_flight_id is None or conflict_flight_id != flight_action:
                     continue
-                # Do not count conflicts that were auto-cancelled by the environment
-                if conflict_flight_id in self.automatically_cancelled_flights:
+                # Do not count conflicts that were cancelled (manually or automatically) by the environment
+                if conflict_flight_id in self.cancelled_flights or conflict_flight_id in self.automatically_cancelled_flights:
                     continue
 
                 # If we got here, this action resolved a conflict
@@ -1777,9 +1799,9 @@ class AircraftDisruptionEnv(gym.Env):
                 if PENALTY_8_PROBABILITY_RESOLUTION_BONUS_ENABLED and PROBABILITY_RESOLUTION_BONUS_SCALE > 0:
                     # Use the probability snapshot from BEFORE uncertainties were processed this step
                     pre_prob = np.nan
-                    if hasattr(self, "pre_action_probabilities"):
+                    if hasattr(self, "pre_action_probabilities") and aircraft_id:
                         pre_prob = self.pre_action_probabilities.get(aircraft_id, np.nan)
-                    if np.isnan(pre_prob):
+                    if np.isnan(pre_prob) and aircraft_id:
                         pre_prob = self.unavailabilities_dict.get(aircraft_id, {}).get('Probability', np.nan)
                     if np.isnan(pre_prob):
                         pre_prob = 1.0  # fallback: treat as certain if unknown
@@ -1908,6 +1930,8 @@ class AircraftDisruptionEnv(gym.Env):
             "scenario_ended": scenario_ended_flag,
             # Unavailability probabilities evolution (for visualization)
             "unavailabilities_probabilities": unavailabilities_probabilities,
+            # Pre-action probabilities (before uncertainties were processed) - for probability resolution bonus calculation
+            "pre_action_probabilities": getattr(self, 'pre_action_probabilities', {}).copy() if hasattr(self, 'pre_action_probabilities') else {},
             # All penalty values consolidated in penalties dict (no duplicates)
             "penalties": {
                 "delay_penalty_total": delay_penalty_total,
@@ -2297,6 +2321,9 @@ class AircraftDisruptionEnv(gym.Env):
 
             else:
                 # Swap the flight to the selected aircraft
+                # Store original aircraft in case we need to revert
+                original_aircraft_id = current_aircraft_id
+                
                 # Update rotations_dict
                 self.rotations_dict[selected_flight_id]['Aircraft'] = selected_aircraft_id
                 self.scenario_wide_tail_swaps += 1  # Increment counter when flight is moved to new aircraft
@@ -2311,6 +2338,7 @@ class AircraftDisruptionEnv(gym.Env):
                 dep_time_minutes = (dep_time - self.earliest_datetime).total_seconds() / 60
                 arr_time_minutes = (arr_time - self.earliest_datetime).total_seconds() / 60
 
+                # Schedule flight on new aircraft
                 self.schedule_flight_on_aircraft(selected_aircraft_id, selected_flight_id, dep_time_minutes, current_aircraft_id, arr_time_minutes)
 
             # Proceed to next timestep
@@ -2428,7 +2456,7 @@ class AircraftDisruptionEnv(gym.Env):
         if DEBUG_MODE_SCHEDULING:
             print(f"current_ac_is_same_as_target_ac: {current_ac_is_same_as_target_ac}") 
 
-        # If flight is on current aircraft and completes before disruption, keep it there
+        # If flight is on current aircraft and completes before disruption, keep it there (matching Model 1)
         if current_ac_is_same_as_target_ac and not has_unavail_overlap:
             if DEBUG_MODE_SCHEDULING:
                 print("Flight is on current aircraft and completes before disruption - keeping original schedule")
@@ -2452,7 +2480,20 @@ class AircraftDisruptionEnv(gym.Env):
                     dep_time = max(dep_time, original_dep_minutes)
                     arr_time = dep_time + flight_duration
                     delay = dep_time - original_dep_minutes
-                    self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
+                    
+                    # Sanity check: delay should be reasonable (not more than a few days)
+                    max_reasonable_delay_minutes = 1 * 24 * 60  # 1 day
+                    if delay > max_reasonable_delay_minutes:
+                        if DEBUG_MODE_SCHEDULING:
+                            print(f"  WARNING: Delay ({delay:.1f} minutes = {delay/60:.1f} hours) is unreasonably large for flight {flight_id}!")
+                            print(f"    original_dep_minutes: {original_dep_minutes:.1f}")
+                            print(f"    dep_time: {dep_time:.1f}")
+                        delay = max_reasonable_delay_minutes
+                    
+                    # Store delay as absolute delay from original departure time (don't accumulate)
+                    # If flight is moved multiple times, this always calculates from original (matching Model 1)
+                    if delay > 0:
+                        self.environment_delayed_flights[flight_id] = delay
                     self.something_happened = True
                 else: #unavail prob = 0.00, keep original schedule
                     if DEBUG_MODE_SCHEDULING:
@@ -2468,7 +2509,20 @@ class AircraftDisruptionEnv(gym.Env):
                     dep_time = max(dep_time, original_dep_minutes)
                     arr_time = dep_time + flight_duration
                     delay = dep_time - original_dep_minutes
-                    self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
+                    
+                    # Sanity check: delay should be reasonable (not more than a few days)
+                    max_reasonable_delay_minutes = 1 * 24 * 60  # 1 day
+                    if delay > max_reasonable_delay_minutes:
+                        if DEBUG_MODE_SCHEDULING:
+                            print(f"  WARNING: Delay ({delay:.1f} minutes = {delay/60:.1f} hours) is unreasonably large for flight {flight_id}!")
+                            print(f"    original_dep_minutes: {original_dep_minutes:.1f}")
+                            print(f"    dep_time: {dep_time:.1f}")
+                        delay = max_reasonable_delay_minutes
+                    
+                    # Store delay as absolute delay from original departure time (don't accumulate)
+                    # If flight is moved multiple times, this always calculates from original (matching Model 1)
+                    if delay > 0:
+                        self.environment_delayed_flights[flight_id] = delay
                     self.something_happened = True
                 else: #unavail prob < 1.00, allow overlap
                     if DEBUG_MODE_SCHEDULING:
@@ -2476,18 +2530,45 @@ class AircraftDisruptionEnv(gym.Env):
                     self.something_happened = True
 
         # Get all flights on this aircraft using flight_features
+        # IMPORTANT: Get flights_dict times BEFORE any updates, so we can track original times
         scheduled_flights = []
-        ac_mtx, flight_features = self._get_initial_state()
+        original_times_dict = {}  # Track original times for delay calculation (from flights_dict at start)
         
-        aircraft_flights = self.get_all_flights_for_aircraft(aircraft_idx, flight_features)
-        interval_minutes = 15
+        # Get original times from flights_dict BEFORE any updates (this is the baseline for delay calculation)
+        # For existing flights, get their current times from flights_dict
+        for existing_flight_id in self.flights_dict:
+            if existing_flight_id in self.rotations_dict:
+                existing_aircraft_id = self.rotations_dict[existing_flight_id]['Aircraft']
+                if existing_aircraft_id == aircraft_id and existing_flight_id != flight_id:
+                    existing_dep_time = parse_time_with_day_offset(
+                        self.flights_dict[existing_flight_id]['DepTime'], 
+                        self.start_datetime
+                    )
+                    existing_dep_minutes = (existing_dep_time - self.earliest_datetime).total_seconds() / 60
+                    original_times_dict[existing_flight_id] = existing_dep_minutes
         
-        for existing_flight_id, existing_dep_interval, existing_arr_interval, existing_status in aircraft_flights:
-            if existing_flight_id != flight_id and existing_status > 0:  # Skip cancelled flights
-                # Convert intervals to minutes
-                existing_dep_minutes = existing_dep_interval * interval_minutes
-                existing_arr_minutes = existing_arr_interval * interval_minutes
-                scheduled_flights.append((existing_flight_id, existing_dep_minutes, existing_arr_minutes))
+        # Store original time for the flight being scheduled (from flights_dict before any updates)
+        original_times_dict[flight_id] = original_dep_minutes
+        
+        # Now get current state to see what flights are on this aircraft
+        # Use flights_dict directly to get actual current times (not interval-based from flight_features)
+        # This ensures we have the most up-to-date times, including any previous delays
+        for existing_flight_id in self.flights_dict:
+            if existing_flight_id in self.rotations_dict:
+                existing_aircraft_id = self.rotations_dict[existing_flight_id]['Aircraft']
+                if existing_aircraft_id == aircraft_id and existing_flight_id != flight_id:
+                    # Get actual current times from flights_dict (these may already include delays from previous steps)
+                    existing_dep_time = parse_time_with_day_offset(
+                        self.flights_dict[existing_flight_id]['DepTime'], 
+                        self.start_datetime
+                    )
+                    existing_arr_time = parse_time_with_day_offset(
+                        self.flights_dict[existing_flight_id]['ArrTime'], 
+                        self.start_datetime
+                    )
+                    existing_dep_minutes = (existing_dep_time - self.earliest_datetime).total_seconds() / 60
+                    existing_arr_minutes = (existing_arr_time - self.earliest_datetime).total_seconds() / 60
+                    scheduled_flights.append((existing_flight_id, existing_dep_minutes, existing_arr_minutes))
         
         # Sort flights by departure time
         scheduled_flights.sort(key=lambda x: x[1])
@@ -2511,10 +2592,20 @@ class AircraftDisruptionEnv(gym.Env):
         scheduled_flights.insert(insert_idx, (flight_id, dep_time, arr_time))
 
         # Now process all flights in sequence to ensure proper spacing with minimal cascading
-        self._optimize_schedule_with_minimal_cascading(scheduled_flights, aircraft_idx)
+        # Pass original_times_dict so delays can be calculated correctly
+        self._optimize_schedule_with_minimal_cascading(scheduled_flights, aircraft_idx, original_times_dict)
 
-        # Update flights_dict
-        self.update_flight_times(flight_id, dep_time, arr_time)
+        # Get the final times for flight_id from scheduled_flights (they may have been updated by optimization)
+        final_dep_time = dep_time
+        final_arr_time = arr_time
+        for fid, fdep, farr in scheduled_flights:
+            if fid == flight_id:
+                final_dep_time = fdep
+                final_arr_time = farr
+                break
+
+        # Update flights_dict with final times
+        self.update_flight_times(flight_id, final_dep_time, final_arr_time)
 
         if DEBUG_MODE_SCHEDULING:
             print(f"Final departure time for flight {flight_id}: {dep_time} minutes.")
@@ -2553,9 +2644,9 @@ class AircraftDisruptionEnv(gym.Env):
             current_time = 0
             
             for i, (test_flight_id, test_dep, test_arr) in enumerate(test_schedule):
-                # Check for overlap with previous flight
-                if test_dep < current_time + MIN_TURN_TIME:
-                    new_dep = current_time + MIN_TURN_TIME
+                # Check for overlap with previous flight (no turn time needed, matching Model 1)
+                if test_dep < current_time:
+                    new_dep = current_time
                     new_arr = new_dep + (test_arr - test_dep)
                     
                     # Calculate delay for this flight
@@ -2583,42 +2674,67 @@ class AircraftDisruptionEnv(gym.Env):
                 
         return optimal_dep, optimal_arr
     
-    def _optimize_schedule_with_minimal_cascading(self, scheduled_flights, aircraft_idx):
+    def _optimize_schedule_with_minimal_cascading(self, scheduled_flights, aircraft_idx, original_times_dict=None):
         """
         Optimizes the schedule to minimize cascading delays using matrix-based approach.
         
+        This function processes all flights in sequence and ensures proper spacing.
+        It updates flights_dict for ALL flights that need to be delayed.
+        
         Args:
-            scheduled_flights (list): List of flights to optimize
+            scheduled_flights (list): List of flights to optimize (modified in place)
             aircraft_idx (int): Aircraft index
+            original_times_dict (dict): Dictionary mapping flight_id to original departure time in minutes
+                                      (from earliest_datetime). Used for accurate delay calculation.
         """
+        if original_times_dict is None:
+            original_times_dict = {}
+        
         current_time = 0
         
         for i, (flight_id, dep_time, arr_time) in enumerate(scheduled_flights):
-            # Check for overlap with previous flight
-            if dep_time < current_time + MIN_TURN_TIME:
-                new_dep_time = current_time + MIN_TURN_TIME
+            # Check for overlap with previous flight (no turn time needed, matching Model 1)
+            if dep_time < current_time:
+                new_dep_time = current_time
                 new_arr_time = new_dep_time + (arr_time - dep_time)
                 
-                # Update the flight times
-                if flight_id == flight_id:  # This is our flight
-                    dep_time = new_dep_time
-                    arr_time = new_arr_time
-                else:
-                    # Update the other flight's times
-                    self.update_flight_times(flight_id, new_dep_time, new_arr_time)
-                
-                # Update the scheduled_flights list with new times
-                scheduled_flights[i] = (flight_id, new_dep_time, new_arr_time)
-                
-                # Track the delay (only if flight still exists in flights_dict)
-                if flight_id in self.flights_dict:
+                # Calculate delay BEFORE updating flights_dict (so we can get original time)
+                incremental_delay = 0
+                if flight_id in original_times_dict:
+                    original_dep_minutes = original_times_dict[flight_id]
+                    incremental_delay = new_dep_time - original_dep_minutes
+                elif flight_id in self.flights_dict:
+                    # Fallback: get original time from flights_dict BEFORE updating
                     original_dep = parse_time_with_day_offset(
                         self.flights_dict[flight_id]['DepTime'], 
                         self.start_datetime
                     )
                     original_dep_minutes = (original_dep - self.earliest_datetime).total_seconds() / 60
-                    delay = new_dep_time - original_dep_minutes
-                    self.environment_delayed_flights[flight_id] = self.environment_delayed_flights.get(flight_id, 0) + delay
+                    incremental_delay = new_dep_time - original_dep_minutes
+                
+                # Update the scheduled_flights list with new times (for all flights that need delaying)
+                scheduled_flights[i] = (flight_id, new_dep_time, new_arr_time)
+                
+                # Update flights_dict for ALL flights that are delayed (including the flight being scheduled)
+                # This ensures the state space reflects the updated times
+                self.update_flight_times(flight_id, new_dep_time, new_arr_time)
+                
+                # Track the delay (only if flight still exists in flights_dict and was actually delayed)
+                # Store delay as absolute delay from original departure time (don't accumulate)
+                # If flight is moved multiple times, this always calculates from original (matching Model 1)
+                if flight_id in self.flights_dict and incremental_delay > 0:
+                    # Sanity check: delay should be reasonable (not more than a few days)
+                    max_reasonable_delay_minutes = 1 * 24 * 60  # 1 day
+                    if incremental_delay > max_reasonable_delay_minutes:
+                        if DEBUG_MODE_SCHEDULING:
+                            print(f"  WARNING: Delay ({incremental_delay:.1f} minutes = {incremental_delay/60:.1f} hours) is unreasonably large!")
+                            print(f"    flight_id: {flight_id}")
+                            print(f"    original_dep_minutes: {original_dep_minutes:.1f}")
+                            print(f"    new_dep_time: {new_dep_time:.1f}")
+                        # Cap the delay to prevent massive penalties
+                        incremental_delay = max_reasonable_delay_minutes
+                    
+                    self.environment_delayed_flights[flight_id] = incremental_delay
                 
                 current_time = new_arr_time
             else:

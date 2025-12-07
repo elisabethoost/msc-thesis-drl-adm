@@ -503,7 +503,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.3e5)  
+    MAX_TOTAL_TIMESTEPS = int(0.1e5)  
     SEEDS = [232323, 242424]
     # SEEDS = [232323]
     brute_force_flag = False

@@ -1735,6 +1735,8 @@ class AircraftDisruptionEnv(gym.Env):
                     print(f"  [Penalty #6: {status}] Scenario ended - Conflict Resolution Summary:")
                     print(f"    Properly resolved: {resolved_count} conflicts {resolved_flights}")
                     print(f"    Unresolved/Cancelled: {unresolved_count} conflicts {unresolved_flights}")
+                    print(f"    Auto-cancelled flights at this point: {self.automatically_cancelled_flights}")
+                    print(f"    Cancelled flights at this point: {self.cancelled_flights}")
                     if PENALTY_6_FINAL_REWARD_ENABLED:
                         print(f"    -{unresolved_conflict_penalty:.2f} penalty for unresolved conflicts ({unresolved_count} * {UNRESOLVED_CONFLICT_PENALTY})")
             elif DEBUG_MODE_REWARD:
@@ -1761,8 +1763,10 @@ class AircraftDisruptionEnv(gym.Env):
                 # Only count conflicts directly resolved by the acted flight
                 if conflict_flight_id is None or conflict_flight_id != flight_action:
                     continue
-                # Do not count conflicts that were auto-cancelled by the environment
-                if conflict_flight_id in self.automatically_cancelled_flights:
+                # Do not count conflicts that were cancelled (manually or automatically) by the environment
+                if conflict_flight_id in self.cancelled_flights or conflict_flight_id in self.automatically_cancelled_flights:
+                    if DEBUG_MODE_REWARD:
+                        print(f"  [Reward #8] Skipping conflict for flight {conflict_flight_id} - cancelled={conflict_flight_id in self.cancelled_flights}, auto_cancelled={conflict_flight_id in self.automatically_cancelled_flights}")
                     continue
 
                 # If we got here, this action resolved a conflict

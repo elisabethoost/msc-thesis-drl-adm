@@ -1652,8 +1652,8 @@ class AircraftDisruptionEnv(gym.Env):
                 # Only count conflicts directly resolved by the acted flight
                 if conflict_flight_id is None or conflict_flight_id != flight_action:
                     continue
-                # Do not count conflicts that were auto-cancelled by the environment
-                if conflict_flight_id in self.automatically_cancelled_flights:
+                # Do not count conflicts that were cancelled (manually or automatically) by the environment
+                if conflict_flight_id in self.cancelled_flights or conflict_flight_id in self.automatically_cancelled_flights:
                     continue
 
                 # If we got here, this action resolved a conflict
@@ -1755,6 +1755,8 @@ class AircraftDisruptionEnv(gym.Env):
             "aircraft_action": aircraft_action,
             "original_departure_time": original_flight_action_departure_time,
             "scenario_ended": scenario_ended_flag,
+            # Pre-action probabilities (before uncertainties were processed) - for probability resolution bonus calculation
+            "pre_action_probabilities": getattr(self, 'pre_action_probabilities', {}).copy() if hasattr(self, 'pre_action_probabilities') else {},
             "penalties": {
                 "delay_penalty_total": delay_penalty_total,
                 "cancel_penalty": cancel_penalty,
@@ -2054,7 +2056,11 @@ class AircraftDisruptionEnv(gym.Env):
         return flight_action, aircraft_action
     
     def remove_flight(self, flight_id):
-        """Removes the specified flight from the dictionaries. Adds it to the cancelled_flights set."""
+        """Removes the specified flight from the dictionaries. Adds it to the automatically_cancelled_flights set.
+        
+        This method is called when flights are automatically cancelled (e.g., when they have already departed
+        and overlap with a confirmed unavailability). These should be tracked separately from manual cancellations.
+        """
         # Remove from flights_dict
         if flight_id in self.flights_dict:
             del self.flights_dict[flight_id]
@@ -2063,8 +2069,9 @@ class AircraftDisruptionEnv(gym.Env):
         if flight_id in self.rotations_dict:
             del self.rotations_dict[flight_id]
 
-        # Mark the flight as canceled
-        self.cancelled_flights.add(flight_id)
+        # Mark the flight as automatically cancelled (not manually cancelled)
+        # This distinguishes automatic cancellations (due to unavailability) from manual cancellations (by agent action)
+        self.automatically_cancelled_flights.add(flight_id)
     
     def cancel_flight(self, flight_id):
         """Cancels the specified flight.

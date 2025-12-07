@@ -361,12 +361,12 @@ def run_train_dqn_both_timesteps(
             print("[WARNING] Model is using CPU (no GPU available)")
 
         # Initialize training variables
-                    total_timesteps = 0
-                    episode_start = 0
-                    rewards = {}
-                    test_rewards = []
-                    epsilon_values = []
-                    epsilon = EPSILON_START
+        total_timesteps = 0
+        episode_start = 0
+        rewards = {}
+        test_rewards = []
+        epsilon_values = []
+        epsilon = EPSILON_START
 
         episode = episode_start
         while total_timesteps < MAX_TOTAL_TIMESTEPS:
@@ -644,6 +644,7 @@ def run_train_dqn_both_timesteps(
                     
                     # Extract unavailability probabilities from info
                     unavailabilities_probabilities = info.get("unavailabilities_probabilities", {})
+                    pre_action_probabilities = info.get("pre_action_probabilities", {})
                     
                     # Store detailed step information for visualization (after all variables are calculated)
                     step_info = {
@@ -688,7 +689,8 @@ def run_train_dqn_both_timesteps(
                         "penalty_flags": penalty_flags,  # Store penalty flags for analysis
                         "flights_dict": {k: v.copy() for k, v in env.flights_dict.items()},  # Store updated flight times
                         "rotations_dict": {k: v.copy() for k, v in env.rotations_dict.items()},  # Store updated rotations
-                        "unavailabilities_probabilities": unavailabilities_probabilities  # Store probability evolution
+                        "unavailabilities_probabilities": unavailabilities_probabilities,  # Store probability evolution (post-action)
+                        "pre_action_probabilities": pre_action_probabilities  # Store pre-action probabilities (before uncertainties processed)
                     }
                     detailed_episode_data[episode]["scenarios"][scenario_folder]["steps"].append(step_info)
 

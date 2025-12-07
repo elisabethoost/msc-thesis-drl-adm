@@ -504,14 +504,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(1e5)  #5e5 = 500000 timesteps for proper convergence (increased from 200k)
+    MAX_TOTAL_TIMESTEPS = int(0.1e5)  #5e5 = 500000 timesteps for proper convergence (increased from 200k)
     SEEDS = [232323, 242424]
     brute_force_flag = False
     cross_val_flag = False
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model2_ssf/training/m2_AllRewardsEnabled"
+    save_folder = "results/model2_ssf/training/m2_AllRewardsEnabled_2"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
