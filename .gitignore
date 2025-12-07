@@ -19,12 +19,14 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
 
 # Virtual Environment
 venv/
 env/
 ENV/
 .venv
+.venv2/
 
 # IDE
 .vscode/
@@ -37,7 +39,7 @@ ENV/
 .ipynb_checkpoints
 *.ipynb_checkpoints
 
-# Data/TRAINING - Ignore all except specific folders
+# Data/TRAINING - Ignore all except specific folders (action-logicII structure)
 # Ignore everything in Data/TRAINING recursively
 Data/TRAINING/**
 # Un-ignore the parent directory (needed for sub-patterns to work)
@@ -49,7 +51,13 @@ Data/TRAINING/**
 # Data Template - Ignore entire folder
 Data Template/
 
-# Results - Ignore all file contents but keep directory structure
+# Data folders (main branch structure)
+data/Testing*/
+data/RESULTS*/
+data/REVERSED*/
+data/temp/
+
+# Results - Ignore all file contents but keep directory structure (action-logicII)
 # This pattern ignores all files in results and subdirectories
 results/**/*
 # Un-ignore parent directories first (needed for sub-patterns to work)
@@ -75,8 +83,35 @@ results/**/*
 !results/model1_rf/training/m1_AllRewardsEnabled/
 !results/model1_rf/training/m1_AllRewardsEnabled/**
 
+# Results patterns (main branch structure)
+results/*/action_sequences/
+results/*/plots/reward-plots-per-scenario/
+/results/a2c/*
+/results/ppo/*
+/results/dqn/*
+!/results/a2c/_*
+!/results/ppo/_*
+!/results/dqn/_*
+
+# Trained models (main branch structure)
+/trained_models/a2c/*
+/trained_models/ppo/*
+!/trained_models/dqn/
+!/trained_models/a2c/
+!/trained_models/ppo/
+!/trained_models/dqn/_*
+!/trained_models/a2c/_*
+!/trained_models/ppo/_*
+
+# Save trained models (main branch structure)
+Save_Trained_Models/training_monitor/checkpoints/*.pt
+Save_Trained_Models/*/checkpoints/*.pt
+Save_Trained_Models/*
+
 # Logs
 logs/**/*.log
+logs/training/*
+logs/*
 
 # OS
 .DS_Store
@@ -96,4 +131,3 @@ Thumbs.db
 # Miscellaneous
 md files/
 results old/
-
