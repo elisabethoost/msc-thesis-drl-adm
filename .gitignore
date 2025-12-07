@@ -1,56 +1,133 @@
-venv/
-.venv/
-.venv2/
-*.pyc
+# Python
 __pycache__/
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.pyc
 
-# add Training and Testing folders
-data/Training*/
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+.venv2/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Data/TRAINING - Ignore all except specific folders (action-logicII structure)
+# Ignore everything in Data/TRAINING recursively
+Data/TRAINING/**
+# Un-ignore the parent directory (needed for sub-patterns to work)
+!Data/TRAINING/
+# Un-ignore the two allowed folders and all their contents
+!Data/TRAINING/3ac-182-green16/**
+!Data/TRAINING/3ac-130-green/**
+
+# Data Template - Ignore entire folder
+Data Template/
+
+# Data folders (main branch structure)
 data/Testing*/
 data/RESULTS*/
 data/REVERSED*/
-
-# add the action sequences folder
-results/*/action_sequences/
 data/temp/
 
-# add the reward plots per scenario
+# Results - Ignore all file contents but keep directory structure (action-logicII)
+# This pattern ignores all files in results and subdirectories
+results/**/*
+# Un-ignore parent directories first (needed for sub-patterns to work)
+!results/
+!results/model1_rf/
+!results/model1_rf/training/
+!results/model1_rf/inference/
+!results/model1_rf/analysis/
+!results/model2_ssf/
+!results/model2_ssf/training/
+!results/model2_ssf/inference/
+!results/model2_ssf/analysis/
+!results/model3_ssf_large/
+!results/model3_ssf_large/training/
+!results/model3_ssf_large/inference/
+!results/model3_ssf_large/analysis/
+# Un-ignore .gitkeep files to allow tracking directory structure
+!results/**/.gitkeep
+# Un-ignore Model 3's m3_2 training results (track all contents)
+!results/model3_ssf_large/training/m3_2/
+!results/model3_ssf_large/training/m3_2/**
+# Un-ignore Model 1's m1_AllRewardsEnabled training results (example output)
+!results/model1_rf/training/m1_AllRewardsEnabled/
+!results/model1_rf/training/m1_AllRewardsEnabled/**
+
+# Results patterns (main branch structure)
+results/*/action_sequences/
 results/*/plots/reward-plots-per-scenario/
-
-# Ignore Jupyter notebook checkpoints and output
-# .ipynb_checkpoints/
-
 /results/a2c/*
 /results/ppo/*
 /results/dqn/*
-
 !/results/a2c/_*
 !/results/ppo/_*
 !/results/dqn/_*
 
-# Ignore all files in the trained_models directory
-# /trained_models/dqn/*
+# Trained models (main branch structure)
 /trained_models/a2c/*
 /trained_models/ppo/*
-
-# Except do not ignore the trained_models directory itself
 !/trained_models/dqn/
 !/trained_models/a2c/
 !/trained_models/ppo/
-
-# Do not ignore files that start with an underscore in the trained_models directory
 !/trained_models/dqn/_*
 !/trained_models/a2c/_*
-!/trained_models/ppo/_*logs/training/training_0238.json
+!/trained_models/ppo/_*
 
+# Save trained models (main branch structure)
+Save_Trained_Models/training_monitor/checkpoints/*.pt
+Save_Trained_Models/*/checkpoints/*.pt
+Save_Trained_Models/*
 
+# Logs
+logs/**/*.log
 logs/training/*
 logs/*
 
-# Ignore large checkpoint files
-Save_Trained_Models/training_monitor/checkpoints/*.pt
-Save_Trained_Models/*/checkpoints/*.pt
-*.pt
+# OS
+.DS_Store
+Thumbs.db
 
-Save_Trained_Models/* 
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Model checkpoints (if large)
+*.pt
+*.pth
+*.h5
+*.ckpt
+
+# Miscellaneous
+md files/
+results old/
