@@ -136,6 +136,14 @@ class AircraftDisruptionEnv(gym.Env):
         self.something_happened = False  # Track if current action actually changed something
         self.previous_probabilities = {aircraft_id: 0.0 for aircraft_id in self.aircraft_ids}
         self.state_history = deque(maxlen=self.obs_stack_size)
+        
+        # Store initial conflict counts per aircraft (set once at scenario start)
+        self.initial_conflict_counts = {}
+        for idx, aircraft_id in enumerate(self.aircraft_ids):
+            if idx >= self.max_aircraft:
+                break
+            self.initial_conflict_counts[aircraft_id] = None  # Will be set in _get_initial_state()
+        
         self.state = self._get_initial_state()
 
         # Initialize eligible flights for conflict resolution bonus
@@ -276,7 +284,29 @@ class AircraftDisruptionEnv(gym.Env):
             state[idx + 1, 2] = unavail_start_minutes
             state[idx + 1, 3] = unavail_end_minutes
 
-            # Gather and store flight times (starting from column 4)
+            # Calculate and store conflict counts for this aircraft
+            # include_departed=True: Count ALL unresolved conflicts (actionable + departed but unresolved)
+            # This ensures counter only decreases when conflicts are resolved, not when flights depart
+            # Departed flights that still overlap can still cause penalties if p resolves to 1.0
+            current_conflicts_for_ac = self._count_conflicts_per_aircraft(aircraft_id, include_departed=True)
+            
+            # Store initial conflict count in column 4 (only set once at scenario start)
+            # Use stored initial count if available, otherwise calculate and store it
+            if aircraft_id in self.initial_conflict_counts and self.initial_conflict_counts[aircraft_id] is not None:
+                # Use stored initial count (set at scenario start)
+                initial_conflicts_for_ac = self.initial_conflict_counts[aircraft_id]
+            else:
+                # First time - calculate and store initial count (includes all conflicts at start)
+                initial_conflicts_for_ac = current_conflicts_for_ac
+                self.initial_conflict_counts[aircraft_id] = initial_conflicts_for_ac
+            
+            # Store initial conflict count in column 4 (after unavailability info)
+            state[idx + 1, 4] = initial_conflicts_for_ac
+            # Store current conflict count in column 5 (always update this)
+            # This includes departed flights that still overlap (unresolved conflicts)
+            state[idx + 1, 5] = current_conflicts_for_ac
+
+            # Gather and store flight times (starting from column 6)
             # we add every flight that has not yet departed and that is not in conflict with an unavailability period
             flight_times = []
             for flight_id, rotation_info in self.rotations_dict.items():
@@ -309,13 +339,17 @@ class AircraftDisruptionEnv(gym.Env):
             # Sort flights by departure time
             flight_times.sort(key=lambda x: x[1])
 
-            # Store flight information starting from column 4
+            # Store flight information starting from column 6 (conflict counters take columns 4-5)
+            # Now using 4 columns per flight: id, dep, arr, conflict_flag
             for i, (flight_id, dep_time, arr_time) in enumerate(flight_times):
-                col_start = 4 + (i * 3)
-                if col_start + 2 < self.columns_state_space:
+                col_start = 6 + (i * 4)
+                if col_start + 3 < self.columns_state_space:
                     state[idx + 1, col_start] = flight_id
                     state[idx + 1, col_start + 1] = dep_time
                     state[idx + 1, col_start + 2] = arr_time
+                    # Add conflict flag: 1.0 if flight is in conflict, 0.0 otherwise
+                    conflict_flag = 1.0 if self._flight_has_conflict(flight_id) else 0.0
+                    state[idx + 1, col_start + 3] = conflict_flag
 
         # Update flight_id_to_idx with only the active flights
         self.flight_id_to_idx = {
@@ -373,6 +407,14 @@ class AircraftDisruptionEnv(gym.Env):
             state_to_observe[idx + 1, 1] = obs_breakdown_probability
             state_to_observe[idx + 1, 2] = obs_unavail_start_minutes
             state_to_observe[idx + 1, 3] = obs_unavail_end_minutes
+
+            # Update conflict counts for this aircraft (no masking needed - always visible)
+            # include_departed=True: Count ALL unresolved conflicts (actionable + departed but unresolved)
+            # This ensures counter accurately reflects unresolved conflicts that could still cause penalties
+            current_conflicts_for_ac = self._count_conflicts_per_aircraft(aircraft_id, include_departed=True)
+            # Update current conflict count in column 5
+            state_to_observe[idx + 1, 5] = current_conflicts_for_ac
+            # Note: initial count (column 4) doesn't change during scenario, so keep it as is
 
             if self.enable_temporal_features and self.num_temporal_features > 0:
                 aircraft_features = self._get_aircraft_temporal_features(
@@ -444,7 +486,8 @@ class AircraftDisruptionEnv(gym.Env):
                 aircraft_id = self.aircraft_ids[i - 1]
                 if aircraft_id in self.unavailabilities_dict:
                     self.unavailabilities_dict[aircraft_id]['EndTime'] = state[i, 3]
-            for j in range(4, self.columns_state_space - 2, 3):
+            # Flights start at column 6 (columns 4-5 are conflict counters, 4 columns per flight: id, dep, arr, conflict_flag)
+            for j in range(6, self.columns_state_space - 2, 4):
                 if not np.isnan(state[i, j + 1]) and not np.isnan(state[i, j + 2]) and state[i, j + 1] > state[i, j + 2]:
                     state[i, j + 2] += 1440
 
@@ -1026,8 +1069,9 @@ class AircraftDisruptionEnv(gym.Env):
                 self.swapped_flights.append((selected_flight_id, selected_aircraft_id))
 
                 # Remove flight from current aircraft's schedule
+                # Flights start at column 6 (columns 4-5 are conflict counters, 4 columns per flight: id, dep, arr, conflict_flag)
                 current_aircraft_idx = self.aircraft_id_to_idx[current_aircraft_id] + 1
-                for j in range(4, self.columns_state_space - 2, 3):
+                for j in range(6, self.columns_state_space - 2, 4):
                     if self.state[current_aircraft_idx, j] == selected_flight_id:
                         self.state[current_aircraft_idx, j] = np.nan
                         self.state[current_aircraft_idx, j + 1] = np.nan
@@ -1239,8 +1283,9 @@ class AircraftDisruptionEnv(gym.Env):
                     self.something_happened = True
 
         # Get all flights on this aircraft sorted by departure time
+        # Flights start at column 6 (columns 4-5 are conflict counters, 4 columns per flight: id, dep, arr, conflict_flag)
         scheduled_flights = []
-        for j in range(4, self.columns_state_space - 2, 3):
+        for j in range(6, self.columns_state_space - 2, 4):
             existing_flight_id = self.state[aircraft_idx, j]
             existing_dep_time = self.state[aircraft_idx, j + 1]
             existing_arr_time = self.state[aircraft_idx, j + 2]
@@ -1281,7 +1326,8 @@ class AircraftDisruptionEnv(gym.Env):
 
         # Finally, update the state for our flight
         flight_placed = False
-        for j in range(4, self.columns_state_space - 2, 3):
+        # Flights start at column 6 (columns 4-5 are conflict counters)
+        for j in range(6, self.columns_state_space - 2, 4):
             if self.state[aircraft_idx, j] == flight_id:
                 self.state[aircraft_idx, j + 1] = dep_time
                 self.state[aircraft_idx, j + 2] = arr_time
@@ -1441,8 +1487,9 @@ class AircraftDisruptionEnv(gym.Env):
         self.cancelled_flights.add(flight_id)
 
         # Remove the flight from the state
+        # Flights start at column 6 (columns 4-5 are conflict counters)
         for idx in range(1, self.rows_state_space):
-            for j in range(4, self.columns_state_space - 2, 3):
+            for j in range(6, self.columns_state_space - 2, 4):
                 existing_flight_id = self.state[idx, j]
                 if existing_flight_id == flight_id:
                     # Remove flight from state
@@ -2161,6 +2208,13 @@ class AircraftDisruptionEnv(gym.Env):
         # Calculate total simulation minutes
         total_simulation_minutes = (self.end_datetime - self.start_datetime).total_seconds() / 60
 
+        # Reset initial conflict counts for new scenario
+        self.initial_conflict_counts = {}
+        for idx, aircraft_id in enumerate(self.aircraft_ids):
+            if idx >= self.max_aircraft:
+                break
+            self.initial_conflict_counts[aircraft_id] = None  # Will be set in _get_initial_state()
+
         self.state = self._get_initial_state()
 
         self.initial_conflict_combinations = self.get_initial_conflicts()
@@ -2212,7 +2266,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # Flights start at column 6 (columns 4-5 are conflict counters)
+                for j in range(6, self.columns_state_space - 2, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2254,7 +2309,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # Flights start at column 6 (columns 4-5 are conflict counters)
+                for j in range(6, self.columns_state_space - 2, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2300,7 +2356,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # Flights start at column 6 (columns 4-5 are conflict counters)
+                for j in range(6, self.columns_state_space - 2, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2325,6 +2382,61 @@ class AircraftDisruptionEnv(gym.Env):
 
         return current_conflicts
     
+    def _count_conflicts_per_aircraft(self, aircraft_id, include_departed=True):
+        """Count conflicts for a specific aircraft (regardless of probability).
+        
+        Args:
+            aircraft_id: The aircraft ID to count conflicts for
+            include_departed: If True, count departed flights that still overlap with unavailability
+                            (these can still cause penalties if p resolves to 1).
+                            If False, only count actionable conflicts (not yet departed).
+        
+        Returns:
+            int: Number of flights overlapping with unavailability on this aircraft
+        """
+        count = 0
+        breakdown_probability = self.unavailabilities_dict[aircraft_id]['Probability']
+        
+        # Only count if probability > 0 (has unavailability)
+        if breakdown_probability <= 0 or np.isnan(breakdown_probability):
+            return 0
+        
+        unavail_start = self.unavailabilities_dict[aircraft_id]['StartTime']
+        unavail_end = self.unavailabilities_dict[aircraft_id]['EndTime']
+        
+        if np.isnan(unavail_start) or np.isnan(unavail_end):
+            return 0
+        
+        current_time_minutes = (self.current_datetime - self.start_datetime).total_seconds() / 60
+        
+        # Count flights overlapping with unavailability
+        for flight_id, rotation_info in self.rotations_dict.items():
+            if flight_id not in self.flights_dict:
+                continue
+            if rotation_info['Aircraft'] != aircraft_id:
+                continue
+            if flight_id in self.cancelled_flights:
+                continue  # Skip cancelled flights
+            
+            flight_info = self.flights_dict[flight_id]
+            dep_time = parse_time_with_day_offset(flight_info['DepTime'], self.start_datetime)
+            arr_time = parse_time_with_day_offset(flight_info['ArrTime'], self.start_datetime)
+            
+            dep_time_minutes = (dep_time - self.earliest_datetime).total_seconds() / 60
+            arr_time_minutes = (arr_time - self.earliest_datetime).total_seconds() / 60
+            
+            # Check if flight overlaps with unavailability
+            if dep_time_minutes < unavail_end and arr_time_minutes > unavail_start:
+                # If include_departed=False, skip flights that have already departed
+                # (these are no longer actionable)
+                if not include_departed and dep_time_minutes < current_time_minutes:
+                    continue
+                
+                # If include_departed=True, count all overlapping flights regardless of departure time
+                # This includes departed flights that could still cause penalties if p resolves to 1
+                count += 1
+        
+        return count
 
     def get_current_conflicts_with_prob_1(self):
         """Retrieves the current conflicts in the environment.
@@ -2353,7 +2465,8 @@ class AircraftDisruptionEnv(gym.Env):
 
             if not np.isnan(unavail_start) and not np.isnan(unavail_end):
                 # Check for conflicts between flights and unavailability periods
-                for j in range(4, self.columns_state_space - 2, 3):
+                # Flights start at column 6 (columns 4-5 are conflict counters)
+                for j in range(6, self.columns_state_space - 2, 4):
                     flight_id = self.state[idx + 1, j]
                     flight_dep = self.state[idx + 1, j + 1]
                     flight_arr = self.state[idx + 1, j + 2]
@@ -2396,7 +2509,8 @@ class AircraftDisruptionEnv(gym.Env):
                 continue
 
             # Check flights on this aircraft
-            for j in range(4, self.columns_state_space - 2, 3):
+            # Flights start at column 6 (columns 4-5 are conflict counters, 4 columns per flight: id, dep, arr, conflict_flag)
+            for j in range(6, self.columns_state_space - 2, 4):
                 flight_id = self.state[idx + 1, j]
                 flight_dep = self.state[idx + 1, j + 1]
                 flight_arr = self.state[idx + 1, j + 2]
@@ -2586,7 +2700,8 @@ class AircraftDisruptionEnv(gym.Env):
                             break
                             
                         # Check flights assigned to this aircraft for departures during disruption
-                        for j in range(4, self.columns_state_space - 2, 3):
+                        # Flights start at column 6 (columns 4-5 are conflict counters)
+                        for j in range(6, self.columns_state_space - 2, 4):
                             flight_id = self.state[idx + 1, j]
                             dep_time = self.state[idx + 1, j + 1]
                             arr_time = self.state[idx + 1, j + 2]
@@ -2758,7 +2873,8 @@ class AircraftDisruptionEnv(gym.Env):
                 # For uncertain conflicts, allow the move (will be resolved later)
         
         # Check for conflicts with existing flights on target aircraft
-        for j in range(4, self.columns_state_space - 2, 3):
+        # Flights start at column 6 (columns 4-5 are conflict counters)
+        for j in range(6, self.columns_state_space - 2, 4):
             existing_flight_id = self.state[target_aircraft_idx, j]
             existing_dep = self.state[target_aircraft_idx, j + 1]
             existing_arr = self.state[target_aircraft_idx, j + 2]
@@ -2990,7 +3106,8 @@ class AircraftDisruptionGreedyReactive(AircraftDisruptionEnv):
                         break
                         
                     # Check flights assigned to this aircraft for departures during disruption
-                    for j in range(4, self.columns_state_space - 2, 3):
+                    # Flights start at column 6 (columns 4-5 are conflict counters)
+                    for j in range(6, self.columns_state_space - 2, 4):
                         flight_id = self.state[idx + 1, j]
                         dep_time = self.state[idx + 1, j + 1]
                         arr_time = self.state[idx + 1, j + 2]
@@ -3175,7 +3292,8 @@ class AircraftDisruptionGreedyProactive(AircraftDisruptionEnv):
                         break
                         
                     # Check flights assigned to this aircraft for departures during disruption
-                    for j in range(4, self.columns_state_space - 2, 3):
+                    # Flights start at column 6 (columns 4-5 are conflict counters)
+                    for j in range(6, self.columns_state_space - 2, 4):
                         flight_id = self.state[idx + 1, j]
                         dep_time = self.state[idx + 1, j + 1]
                         arr_time = self.state[idx + 1, j + 2]
@@ -3366,7 +3484,8 @@ class AircraftDisruptionConflicted(AircraftDisruptionEnv):
                             reactive_allowed_to_take_action = True
                             break
                             
-                        for j in range(4, self.columns_state_space - 2, 3):
+                        # Flights start at column 6 (columns 4-5 are conflict counters)
+                        for j in range(6, self.columns_state_space - 2, 4):
                             flight_id = self.state[idx + 1, j]
                             dep_time = self.state[idx + 1, j + 1]
                             arr_time = self.state[idx + 1, j + 2]

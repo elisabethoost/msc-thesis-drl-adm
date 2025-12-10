@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timedelta
 from scripts.utils import *
 from scripts.logger import *
-from src.config import *
+from src.config_rf import *
 import numpy as np
 
 def parse_time_with_day_offset_for_conflict(time_str, reference_date):

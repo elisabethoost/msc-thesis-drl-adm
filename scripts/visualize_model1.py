@@ -19,7 +19,7 @@ Usage:
     
 Examples:
     # Model 1 (RF) - results/model1_rf/training/m1_1/3ac-182-green16
-    python scripts/visualize_copy_safe.py results/model1_rf/training/m1_AllRewardsEnabled/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00063"
+    python scripts/visualize_model1.py results/model1_rf/training/m1_AllRewardsEnabled_1/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00063"
     
     # Model 2 (SSF) - results/model2_ssf/training/m2_1/3ac-182-green16
     python scripts/visualize_episode_detailed.py results/model2_ssf/training/m2_AllRewardsEnabled/3ac-182-green16 proactive 232323 2 "Data/TRAINING/3ac-182-green16/stochastic_Scenario_00061"
@@ -377,6 +377,68 @@ class DetailedEpisodeVisualizer:
                             prob_text = f"{initial_prob:.2f}→{probability:.2f}"
                         ax.text(x_position, y_position + 0.1, prob_text, ha='center', va='top', fontsize=8, fontweight='bold')
     
+        # Add conflict counter information to the plot (if available)
+        if isinstance(state_data, dict) and 'conflict_counters' in state_data:
+            conflict_counters = state_data.get('conflict_counters', {})
+            actual_conflicts = state_data.get('actual_conflicts_per_ac', {})
+            
+            if conflict_counters:
+                # Add text box with conflict counter info
+                counter_text = "Conflict Counters:\n"
+                for aircraft_id in sorted(conflict_counters.keys()):
+                    counter_data = conflict_counters[aircraft_id]
+                    initial = counter_data.get('initial', 0)
+                    current = counter_data.get('current', 0)
+                    actual = actual_conflicts.get(aircraft_id, 0)
+                    
+                    # Short aircraft ID for display
+                    ac_short = aircraft_id.replace('B737#', 'AC').replace('AC', 'AC')
+                    change = current - initial
+                    change_str = f"({change:+.0f})" if change != 0 else ""
+                    
+                    counter_text += f"{ac_short}: I={initial:.0f} C={current:.0f}{change_str} A={actual:.0f}\n"
+                
+                # Position text box in top-right corner
+                ax.text(0.98, 0.98, counter_text.strip(), transform=ax.transAxes,
+                       fontsize=8, verticalalignment='top', horizontalalignment='right',
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        # Add Q-values information to the plot (if available)
+        if isinstance(state_data, dict) and 'q_values' in state_data:
+            q_values_info = state_data.get('q_values', {})
+            if q_values_info:
+                chosen_q = q_values_info.get('chosen_action_q')
+                top_q = q_values_info.get('top_q_value')
+                mean_q = q_values_info.get('mean_q_value')
+                
+                # Get chosen action in (flight, ac) format for display
+                if 'flight_action' in state_data and 'aircraft_action' in state_data:
+                    chosen_fa = state_data.get('flight_action', '?')
+                    chosen_aa = state_data.get('aircraft_action', '?')
+                elif 'action' in state_data:
+                    action_index = state_data.get('action', 0)
+                    chosen_fa, chosen_aa = self.map_index_to_action(action_index)
+                else:
+                    chosen_fa, chosen_aa = '?', '?'
+                
+                q_text = "Q-Values:\n"
+                if chosen_q is not None:
+                    q_text += f"Chosen ({chosen_fa},{chosen_aa}): {chosen_q:.2f}\n"
+                if top_q is not None:
+                    q_text += f"Top: {top_q:.2f}\n"
+                if mean_q is not None:
+                    q_text += f"Mean: {mean_q:.2f}\n"
+                if chosen_q is not None and top_q is not None:
+                    diff = top_q - chosen_q
+                    if diff > 0.01:
+                        q_text += f"Gap: {diff:.2f}\n"
+                
+                # Position Q-values box below conflict counters (or top-left if no counters)
+                y_pos = 0.85 if (isinstance(state_data, dict) and 'conflict_counters' in state_data and state_data.get('conflict_counters')) else 0.98
+                ax.text(0.02, y_pos, q_text.strip(), transform=ax.transAxes,
+                       fontsize=8, verticalalignment='top', horizontalalignment='left',
+                       bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+
     def get_action_description(self, step_info):
         """Get human-readable action description."""
         action_reason = step_info.get("action_reason", "unknown")
@@ -395,7 +457,7 @@ class DetailedEpisodeVisualizer:
         elif aircraft_action == 0:
             action_desc = f"Cancel Flight {flight_action} ({flight_action}, 0)"
         else:
-            action_desc = f"Flight {flight_action} -> AC{aircraft_action}"
+            action_desc = f"Flight {flight_action} -> AC{aircraft_action} ({flight_action}, {aircraft_action})"
         
         return action_desc
     
@@ -456,6 +518,43 @@ class DetailedEpisodeVisualizer:
             print(f"  Reward: {reward:.4f}")
             print(f"  Total Reward So Far: {total_reward:.4f}")
             
+            # Print Q-values (if available)
+            q_values_info = step_info.get('q_values', {})
+            if q_values_info:
+                chosen_q = q_values_info.get('chosen_action_q')
+                top_q = q_values_info.get('top_q_value')
+                mean_q = q_values_info.get('mean_q_value')
+                top_5 = q_values_info.get('top_5_actions', [])
+                
+                # Get chosen action in (flight, ac) format
+                if "flight_action" in step_info and "aircraft_action" in step_info:
+                    chosen_fa = step_info["flight_action"]
+                    chosen_aa = step_info["aircraft_action"]
+                else:
+                    action_index = step_info.get("action", 0)
+                    chosen_fa, chosen_aa = self.map_index_to_action(action_index)
+                
+                print(f"  Q-Values:")
+                if chosen_q is not None:
+                    print(f"    Chosen action ({chosen_fa},{chosen_aa}) Q-value: {chosen_q:.4f}")
+                if top_q is not None:
+                    print(f"    Top Q-value (best action): {top_q:.4f}")
+                if mean_q is not None:
+                    print(f"    Mean Q-value (valid actions): {mean_q:.4f}")
+                if chosen_q is not None and top_q is not None:
+                    diff = top_q - chosen_q
+                    if diff > 0.01:
+                        print(f"    Chosen action is {diff:.4f} below best action")
+                    elif diff < -0.01:
+                        print(f"    Chosen action is {abs(diff):.4f} above best action")
+                if top_5:
+                    # Decode action indices to (flight_action, ac_action) format
+                    decoded_top_5 = []
+                    for idx, q in top_5[:5]:
+                        fa, aa = self.map_index_to_action(idx)
+                        decoded_top_5.append(f"({fa},{aa}): {q:.2f}")
+                    print(f"    Top 5 actions: {', '.join(decoded_top_5)}")
+            
             # Get delay information (show even if not penalized)
             delay_minutes_info = step_info.get('delay_penalty_minutes', None)
             environment_delayed = step_info.get('environment_delayed_flights', {})
@@ -479,6 +578,24 @@ class DetailedEpisodeVisualizer:
                 delay_hours = total_delay_minutes / 60
                 num_delayed_flights = len(environment_delayed) if environment_delayed else 0
                 print(f"  Delays: {total_delay_minutes:.1f} min ({delay_hours:.2f} hours) across {num_delayed_flights} flight(s)")
+            
+            # Print conflict counters (if available)
+            conflict_counters = step_info.get('conflict_counters', {})
+            actual_conflicts = step_info.get('actual_conflicts_per_ac', {})
+            
+            if conflict_counters:
+                print(f"  Conflict Counters:")
+                for aircraft_id in sorted(conflict_counters.keys()):
+                    counter_data = conflict_counters[aircraft_id]
+                    initial = counter_data.get('initial', 0)
+                    current = counter_data.get('current', 0)
+                    actual = actual_conflicts.get(aircraft_id, 0)
+                    
+                    # Format display
+                    change = current - initial
+                    change_str = f" ({change:+.0f})" if change != 0 else ""
+                    
+                    print(f"    {aircraft_id}: Initial={initial:.0f}, Current={current:.0f}{change_str}, Actual={actual:.0f}")
             
             # Print penalties breakdown
             penalties = step_info.get('penalties', {})

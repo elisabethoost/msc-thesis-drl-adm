@@ -503,7 +503,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Common configuration
-    MAX_TOTAL_TIMESTEPS = int(0.1e5)  
+    MAX_TOTAL_TIMESTEPS = int(0.5e5)  
     SEEDS = [232323, 242424]
     # SEEDS = [232323]
     brute_force_flag = False
@@ -511,7 +511,7 @@ if __name__ == "__main__":
     early_stopping_flag = False
     CROSS_VAL_INTERVAL = 1
     printing_intermediate_results = False
-    save_folder = "results/model1_rf/training/m1_AllRewardsEnabled_1"
+    save_folder = "results/model1_rf/training/m1_DQN_debug7"
     TESTING_FOLDERS_PATH = "Data/TRAINING50/3ac-702-train/"
 
     # Define environment types
@@ -527,14 +527,11 @@ if __name__ == "__main__":
 
     all_folders_temp = [
         # "Data/TRAINING/3ac-130-green/"
-        "Data/TRAINING/3ac-182-green16/"
+         "Data/TRAINING/3ac-182-green16/"
+        # "Data/TRAINING/3ac-120-deterministic"
         # "Data/TRAINING/3ac-13-green16/"	
         # "Data/TRAINING/3ac-520-blue/"	
-        # "Data/TRAINING/3ac-702-train/"
-        #"Data/TRAINING/6ac-26-lilac/"
-        # "Data/TRAINING/6ac-13-mauve"
-        # "Data/TRAINING/6ac-20-lilac/" 
-        # "Data/TRAINING/6ac-65-yellow"
+        
         ]
             
     # main.py considers 3 different scenarios: 

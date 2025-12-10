@@ -50,28 +50,35 @@ def run_train_dqn_both_timesteps(
 
     save_results_big_run = f"{save_folder}/{stripped_scenario_folder}"
 
-    # Constants and Training Settings
-    LEARNING_RATE = 0.0005                    
-    GAMMA = 0.9999                            
-    BUFFER_SIZE = 100000                     # Increased buffer size for better experience replay
-    BATCH_SIZE = 128                         # Standard batch size for stability
-    TARGET_UPDATE_INTERVAL = 100            
+    # Constants and Training Settings - OPTIMIZED FOR 50K TIMESTEPS
+    LEARNING_RATE = 0.001                    # Increased from 0.0005 for faster learning with limited timesteps
+    GAMMA = 0.995                            # Reduced from 0.9999 to reduce impact of distant penalties, focus on immediate rewards
+    BUFFER_SIZE = 100000                    # Large buffer for diverse experience replay
+    BATCH_SIZE = 256                        # Increased from 128: with ~840 steps/episode, larger batches improve stability
+    TARGET_UPDATE_INTERVAL = 200            # Increased from 100: more stable target network updates
     NEURAL_NET_STRUCTURE = dict(net_arch=[256, 256*2, 256])
     
 
-    LEARNING_STARTS = 0                         
-    TRAIN_FREQ = 20                          
+    LEARNING_STARTS = 1000                  # Start training after collecting some diverse experience
+    TRAIN_FREQ = 8                          # Reduced from 20: train more frequently for faster learning
+    GRADIENT_STEPS = 2                      # More gradient steps per training call for better learning
 
     # Episode termination settings
     MAX_STEPS_PER_SCENARIO = 40            
 
-    # Exploration parameters
+    # Exploration parameters - OPTIMIZED FOR 50K TIMESTEPS
     EPSILON_START = 1.0                      # Starts with 100% random exploration
-    EPSILON_MIN = 0.15                       # Keep exploring 15% even late in training (increased from 0.025 for more exploration)
-    PERCENTAGE_MIN = 90                      # Decay over 95% of training (maintains long exploration period)
-    EPSILON_TYPE = "exponential"             # Use exponential decay for gradual learning, use "mixed" for linear and exponential decay
+    EPSILON_MIN = 0.05                       # Reduced from 0.15: less exploration late in training, more exploitation
+    PERCENTAGE_MIN = 70                     # Reduced from 90: reach min epsilon faster (at 60% = 30k steps), more exploitation time
+    EPSILON_TYPE = "exponential"             # Use exponential decay for gradual learning
     if EPSILON_TYPE == "linear":
         EPSILON_MIN = 0
+    
+    # Exploration-exploitation matching: probability of using Q-values (with noise) during exploration
+    # This helps the buffer contain some greedy-like actions, reducing distribution mismatch
+    EXPLORATION_Q_PROB = 0.3                # 30% of exploration steps use Q-values with noise instead of pure random
+    EXPLORATION_CONFLICT_GUIDED_PROB = 0.3  # 30% conflict-guided exploration (reduced from 56% to allow more random exploration)
+    EXPLORATION_NOISE_SCALE = 0.2            # Noise scale for Q-value exploration (relative to Q-value range)
 
     starting_time = time.time()              # gives the time elapsed since 1970-01-01 00:00:00 UTC aka Unix epoch 
 
@@ -139,7 +146,11 @@ def run_train_dqn_both_timesteps(
             "EPSILON_DECAY_RATE": EPSILON_DECAY_RATE,
             "LEARNING_STARTS": LEARNING_STARTS,
             "TRAIN_FREQ": TRAIN_FREQ,
+            "GRADIENT_STEPS": GRADIENT_STEPS,
             "NEURAL_NET_STRUCTURE": NEURAL_NET_STRUCTURE,
+            "EXPLORATION_Q_PROB": EXPLORATION_Q_PROB,
+            "EXPLORATION_CONFLICT_GUIDED_PROB": EXPLORATION_CONFLICT_GUIDED_PROB,
+            "EXPLORATION_NOISE_SCALE": EXPLORATION_NOISE_SCALE,
             "device_info": str(get_device_info(device)),
             "TRAINING_FOLDERS_PATH": TRAINING_FOLDERS_PATH,
             "TESTING_FOLDERS_PATH": TESTING_FOLDERS_PATH,
@@ -164,6 +175,19 @@ def run_train_dqn_both_timesteps(
         
         # Initialize detailed episode tracking for visualization
         detailed_episode_data = {}
+        
+        # Initialize metrics tracking for analysis
+        episode_metrics = {
+            'conflicts_resolved': [],           # Number of conflicts resolved per episode
+            'conflicts_total': [],              # Total conflicts at start per episode
+            'max_steps_hit': [],                # Number of scenarios hitting max steps per episode
+            'resolution_bonus_total': [],       # Total resolution bonuses per episode
+            'unresolved_penalty_total': [],     # Total unresolved penalties per episode
+            'exploration_actions': [],          # Count of exploration actions per episode
+            'exploitation_actions': [],         # Count of exploitation actions per episode
+            'conflict_guided_actions': [],      # Count of conflict-guided actions per episode
+            'q_value_exploration_actions': []   # Count of Q-value exploration actions per episode
+        }
 
         def cross_validate_on_test_data(model, current_episode, log_data):
             cross_val_data = {
@@ -269,6 +293,43 @@ def run_train_dqn_both_timesteps(
             if os.path.isdir(os.path.join(TRAINING_FOLDERS_PATH, folder))
         ]
 
+        # Sort scenarios by difficulty: deterministic (p=1.0) first, then stochastic (0<p<1)
+        def get_scenario_difficulty(scenario_folder):
+            """Return difficulty score: lower = easier (more deterministic)
+            Score = stochastic_count - deterministic_count
+            Negative scores = more deterministic (easier)
+            Positive scores = more stochastic (harder)
+            """
+            try:
+                data_dict = load_scenario_data(scenario_folder)
+                alt_aircraft_dict = data_dict.get('alt_aircraft', {})
+                
+                deterministic_count = 0
+                stochastic_count = 0
+                
+                for ac_id, unavail_info in alt_aircraft_dict.items():
+                    # Handle both list and single dict formats
+                    if not isinstance(unavail_info, list):
+                        unavail_info = [unavail_info]
+                    
+                    for unavail in unavail_info:
+                        prob = unavail.get('Probability', 1.0)
+                        if prob == 1.0:
+                            deterministic_count += 1
+                        elif 0 < prob < 1:
+                            stochastic_count += 1
+                
+                # Lower score = easier (more deterministic)
+                return stochastic_count - deterministic_count
+            except Exception as e:
+                # If loading fails, assume medium difficulty
+                print(f"Warning: Could not load scenario {scenario_folder} for difficulty sorting: {e}")
+                return 0
+        
+        # Sort scenarios: deterministic first (negative scores), then stochastic (positive scores)
+        scenario_folders.sort(key=get_scenario_difficulty)
+        print(f"Sorted {len(scenario_folders)} scenarios by difficulty (deterministic first, stochastic last)")
+
         epsilon = EPSILON_START
         total_timesteps = 0
 
@@ -308,6 +369,7 @@ def run_train_dqn_both_timesteps(
         training_metadata["observation_stack_size"] = int(obs_stack_size)
         
         # Create the model with the correct observation space - OPTIMIZED FOR STABILITY
+        # Use PrioritizedReplayBuffer to emphasize positive reward experiences (like +5000 bonuses)
         model = DQN(
             policy='MultiInputPolicy',
             env=minimal_env,
@@ -320,13 +382,20 @@ def run_train_dqn_both_timesteps(
             verbose=0,
             policy_kwargs=NEURAL_NET_STRUCTURE,
             device=device,
+            # Prioritized Replay Buffer: samples high-reward transitions more often
+            replay_buffer_class=PrioritizedReplayBuffer,
+            replay_buffer_kwargs={
+                'alpha': 0.6,  # Prioritization strength (0=uniform, 1=full priority)
+                'beta': 0.4,   # Importance sampling correction (0=no correction, 1=full correction)
+                'epsilon': 1e-6  # Small constant to ensure non-zero priorities
+            },
             # Stability parameters
             exploration_fraction=PERCENTAGE_MIN/100,  # Use PERCENTAGE_MIN from top of file
             exploration_initial_eps=EPSILON_START,  # Use EPSILON_START from top of file
             exploration_final_eps=EPSILON_MIN,  # Use EPSILON_MIN from top of file
             max_grad_norm=1.0,  # Less aggressive gradient clipping
             train_freq=TRAIN_FREQ,
-            gradient_steps=4  # More gradient steps for better learning
+            gradient_steps=GRADIENT_STEPS  # Use GRADIENT_STEPS from top of file
         )
 
         logger = configure()
@@ -362,6 +431,17 @@ def run_train_dqn_both_timesteps(
                 "epsilon_start": epsilon,
                 "scenarios": {}
             }
+            
+            # Initialize episode metrics counters
+            episode_conflicts_resolved = 0
+            episode_conflicts_total = 0
+            episode_max_steps_hit = 0
+            episode_resolution_bonus = 0.0
+            episode_unresolved_penalty = 0.0
+            episode_exploration_count = 0
+            episode_exploitation_count = 0
+            episode_conflict_guided_count = 0
+            episode_q_exploration_count = 0
 
             for scenario_folder in scenario_folders:
                 scenario_data = {
@@ -415,6 +495,11 @@ def run_train_dqn_both_timesteps(
                         'end_minutes': float(end) if not np.isnan(end) else None
                     }
                 
+                # Track initial conflicts for this scenario
+                initial_conflicts = env.get_current_conflicts()
+                scenario_initial_conflicts = len(initial_conflicts) if initial_conflicts else 0
+                episode_conflicts_total += scenario_initial_conflicts
+                
                 # Store initial state for visualization
                 detailed_episode_data[episode]["scenarios"][scenario_folder]["initial_state"] = {
                     "flights_dict": flights_dict.copy(),
@@ -452,10 +537,23 @@ def run_train_dqn_both_timesteps(
                     action_reason = "None"
                     if env_type == "drl-greedy" or env_type == "myopic" or env_type == "proactive" or env_type == "reactive":
                         if np.random.rand() < epsilon or brute_force_flag:
-                            # During exploration (50% the conflicted flights, 50% random)
-                            if np.random.rand() < 0.8:
+                            # During exploration: mix conflict-guided, Q-value-based, and pure random
+                            exploration_choice = np.random.rand()
+                            
+                            # Option 1: Use Q-values with noise (30% of exploration) - matches exploitation distribution better
+                            if exploration_choice < EXPLORATION_Q_PROB:
+                                # Add noise to Q-values for exploration
+                                q_noise = np.random.normal(0, EXPLORATION_NOISE_SCALE * np.std(masked_q_values[masked_q_values != -np.inf]), size=masked_q_values.shape)
+                                noisy_q_values = masked_q_values + q_noise
+                                noisy_q_values[action_mask == 0] = -np.inf  # Re-apply mask
+                                action = np.argmax(noisy_q_values)
+                                action = np.array(action).reshape(1, -1)
+                                action_reason = "q-value-exploration"
+                                episode_q_exploration_count += 1
+                            
+                            # Option 2: Conflict-guided exploration (30% of total exploration)
+                            elif exploration_choice < EXPLORATION_Q_PROB + EXPLORATION_CONFLICT_GUIDED_PROB:
                                 # Get current conflicts and use them to guide exploration
-                                # Prefer actions that operate on conflicted flights (any aircraft); rely on env scheduling
                                 if DEBUG_MODE_REWARD:
                                     print(f"Current conflicts train_dqn_modular:")
                                 current_conflicts = env.get_current_conflicts()
@@ -483,6 +581,7 @@ def run_train_dqn_both_timesteps(
                                     action = np.random.choice(candidates)
                                     action = np.array(action).reshape(1, -1)
                                     action_reason = "conflict-guided-random"
+                                    episode_conflict_guided_count += 1
                                 else:
                                     # If no conflicts, fall back to random exploration
                                     valid_actions = np.where(action_mask == 1)[0]
@@ -490,16 +589,19 @@ def run_train_dqn_both_timesteps(
                                     action = np.array(action).reshape(1, -1)
                                     action_reason = "exploration"
                             else:
-                                # Random exploration from original action mask
+                                # Pure random exploration (remaining 40% of total exploration - ensures broad coverage)
                                 valid_actions = np.where(action_mask == 1)[0]
                                 action = np.random.choice(valid_actions)
                                 action = np.array(action).reshape(1, -1)
                                 action_reason = "exploration"
+                            
+                            episode_exploration_count += 1
                         else:
                             # Exploitation: always use Q-values
                             action = np.argmax(masked_q_values)
                             action = np.array(action).reshape(1, -1)
                             action_reason = "exploitation"
+                            episode_exploitation_count += 1
                     else:
                         # For other environment types, use standard DQN logic
                         if np.random.rand() < epsilon or brute_force_flag:
@@ -548,6 +650,7 @@ def run_train_dqn_both_timesteps(
                     step_limit_penalty = 0.0  # Initialize penalty
                     if timesteps_local >= MAX_STEPS_PER_SCENARIO:
                         max_steps_reached = True
+                        episode_max_steps_hit += 1
                         # Apply penalty for hitting step limit with unresolved conflicts
                         if env.check_flight_disruption_overlaps():
                             step_limit_penalty = -3000.0  # Large negative reward for failing to resolve conflicts (matches cancellation penalty after scaling)
@@ -567,7 +670,7 @@ def run_train_dqn_both_timesteps(
                     # Removed frequent progress logging to avoid slowing down training
 
                     if total_timesteps > model.learning_starts and total_timesteps % TRAIN_FREQ == 0:
-                        model.train(gradient_steps=1, batch_size=BATCH_SIZE) #performs mini SGD (stochastic gradient descent)
+                        model.train(gradient_steps=GRADIENT_STEPS, batch_size=BATCH_SIZE) #performs mini SGD (stochastic gradient descent)
 
                     if total_timesteps % model.target_update_interval == 0:
                         polyak_update(model.q_net.parameters(), model.q_net_target.parameters(), model.tau)
@@ -593,6 +696,14 @@ def run_train_dqn_both_timesteps(
                     penalty_flags = info.get("penalty_flags", {})  # Get penalty enable flags
                     delay_penalty_minutes = info.get("delay_penalty_minutes", 0)  # Get delay minutes for display
                     
+                    # Track metrics when scenario ends
+                    if scenario_ended:
+                        episode_resolution_bonus += probability_resolution_bonus
+                        episode_unresolved_penalty += unresolved_conflict_penalty
+                        # Check if conflicts were resolved (simplified: if we got resolution bonus, conflicts were resolved)
+                        if probability_resolution_bonus > 0:
+                            episode_conflicts_resolved += int(probability_resolution_bonus / PROBABILITY_RESOLUTION_BONUS_SCALE)
+                    
                     # Get decoded action from info dict (stored by env.step) if available
                     # This ensures we use the actual action that was executed, not re-decode after flights may have been removed
                     flight_action = info.get("flight_action", None)
@@ -607,6 +718,47 @@ def run_train_dqn_both_timesteps(
                     # Extract unavailability probabilities from info
                     unavailabilities_probabilities = info.get("unavailabilities_probabilities", {})
                     
+                    # Extract conflict counters from state (after action, before observation processing)
+                    # State has conflict counters in columns 4-5 of each aircraft row (rows 1-3)
+                    conflict_counters = {}
+                    state_after_action = env.state  # State after action but before process_observation
+                    for idx, aircraft_id in enumerate(env.aircraft_ids):
+                        if idx >= env.max_aircraft:
+                            break
+                        row_idx = idx + 1  # Aircraft rows start at index 1
+                        initial_count = float(state_after_action[row_idx, 4]) if not np.isnan(state_after_action[row_idx, 4]) else 0.0
+                        current_count = float(state_after_action[row_idx, 5]) if not np.isnan(state_after_action[row_idx, 5]) else 0.0
+                        conflict_counters[aircraft_id] = {
+                            "initial": initial_count,
+                            "current": current_count
+                        }
+                    
+                    # Get actual conflicts for verification (compare with counters)
+                    actual_conflicts = env.get_current_conflicts()
+                    # Count conflicts per aircraft for comparison
+                    actual_conflicts_per_ac = {}
+                    for aircraft_id in env.aircraft_ids:
+                        count = 0
+                        for conflict in actual_conflicts:
+                            if isinstance(conflict, (tuple, list)) and len(conflict) >= 2:
+                                if conflict[0] == aircraft_id:
+                                    count += 1
+                            elif conflict == aircraft_id:
+                                count += 1
+                        actual_conflicts_per_ac[aircraft_id] = count
+                    
+                    # Store Q-values for analysis (before action is taken)
+                    # Get Q-values for the chosen action and top actions
+                    chosen_action_q = float(masked_q_values[action.item()]) if action.item() < len(masked_q_values) else None
+                    valid_q_values = masked_q_values[masked_q_values != -np.inf]
+                    top_q_value = float(np.max(valid_q_values)) if len(valid_q_values) > 0 else None
+                    mean_q_value = float(np.mean(valid_q_values)) if len(valid_q_values) > 0 else None
+                    std_q_value = float(np.std(valid_q_values)) if len(valid_q_values) > 0 else None
+                    
+                    # Get top 5 Q-values and their actions for analysis
+                    top_5_indices = np.argsort(masked_q_values)[-5:][::-1]  # Top 5, descending
+                    top_5_q_values = [(int(idx), float(masked_q_values[idx])) for idx in top_5_indices if masked_q_values[idx] != -np.inf]
+                    
                     # Store detailed step information for visualization (after all variables are calculated)
                     step_info = {
                         "step": timesteps_local,
@@ -617,6 +769,13 @@ def run_train_dqn_both_timesteps(
                         "action_reason": action_reason,
                         "epsilon": epsilon,
                         "reward": reward, # reward for this step
+                        "q_values": {
+                            "chosen_action_q": chosen_action_q,  # Q-value of the action that was taken
+                            "top_q_value": top_q_value,  # Highest Q-value among valid actions
+                            "mean_q_value": mean_q_value,  # Mean Q-value of valid actions
+                            "std_q_value": std_q_value,  # Std of Q-values of valid actions
+                            "top_5_actions": top_5_q_values,  # Top 5 actions and their Q-values
+                        },
                         "something_happened": something_happened,  # Track if action actually changed something
                         "scenario_ended": scenario_ended,  # Track if scenario ended and final reward was calculated
                         "penalties": {
@@ -649,7 +808,9 @@ def run_train_dqn_both_timesteps(
                         "penalty_flags": penalty_flags,  # Store penalty flags for analysis
                         "flights_dict": {k: v.copy() for k, v in env.flights_dict.items()},  # Store updated flight times
                         "rotations_dict": {k: v.copy() for k, v in env.rotations_dict.items()},  # Store updated rotations
-                        "unavailabilities_probabilities": unavailabilities_probabilities  # Store probability evolution
+                        "unavailabilities_probabilities": unavailabilities_probabilities,  # Store probability evolution
+                        "conflict_counters": conflict_counters,  # Store conflict counters per aircraft (initial and current from state)
+                        "actual_conflicts_per_ac": actual_conflicts_per_ac  # Store actual conflict counts per aircraft (for verification)
                     }
                     detailed_episode_data[episode]["scenarios"][scenario_folder]["steps"].append(step_info)
 
@@ -709,6 +870,20 @@ def run_train_dqn_both_timesteps(
             rewards[episode]["avg_reward"] = avg_reward_for_this_batch
             rewards[episode]["total_timesteps"] = total_timesteps
             rewards[episode]["max_steps_hit_count"] = max_steps_hit_count
+            
+            # Store episode metrics
+            episode_metrics['conflicts_resolved'].append(episode_conflicts_resolved)
+            episode_metrics['conflicts_total'].append(episode_conflicts_total)
+            episode_metrics['max_steps_hit'].append(episode_max_steps_hit)
+            episode_metrics['resolution_bonus_total'].append(episode_resolution_bonus)
+            episode_metrics['unresolved_penalty_total'].append(episode_unresolved_penalty)
+            episode_metrics['exploration_actions'].append(episode_exploration_count)
+            episode_metrics['exploitation_actions'].append(episode_exploitation_count)
+            episode_metrics['conflict_guided_actions'].append(episode_conflict_guided_count)
+            episode_metrics['q_value_exploration_actions'].append(episode_q_exploration_count)
+            
+            # Calculate success rate (conflicts resolved / total conflicts)
+            success_rate = (episode_conflicts_resolved / episode_conflicts_total * 100) if episode_conflicts_total > 0 else 0.0
 
             current_time = time.time()
             percentage_complete = (total_timesteps / MAX_TOTAL_TIMESTEPS) * 100
@@ -737,7 +912,9 @@ def run_train_dqn_both_timesteps(
             rewards[episode]["timestamp"] = current_time
             time_remaining_str = f"{hours}h{minutes}m" if hours > 0 else f"{minutes}m"
             step_limit_info = f" (max_steps_hit: {max_steps_hit_count}/{len(scenario_folders)})" if max_steps_hit_count > 0 else ""
-            print(f"({total_timesteps:.0f}/{MAX_TOTAL_TIMESTEPS:.0f} - {percentage_complete:.0f}% - {time_remaining_str} remaining, {time_per_10000:.0f}s/10k steps) {env_type:<10} - episode {episode + 1} - epsilon {epsilon:.2f} - reward this episode: {avg_reward_for_this_batch:.2f}{step_limit_info}")
+            conflicts_info = f" | conflicts: {episode_conflicts_resolved}/{episode_conflicts_total} resolved ({success_rate:.1f}%)" if episode_conflicts_total > 0 else ""
+            action_info = f" | actions: {episode_exploitation_count} exploit, {episode_exploration_count} explore ({episode_q_exploration_count} Q-explore, {episode_conflict_guided_count} conflict-guided)"
+            print(f"({total_timesteps:.0f}/{MAX_TOTAL_TIMESTEPS:.0f} - {percentage_complete:.0f}% - {time_remaining_str} remaining, {time_per_10000:.0f}s/10k steps) {env_type:<10} - episode {episode + 1} - epsilon {epsilon:.2f} - reward: {avg_reward_for_this_batch:.2f}{step_limit_info}{conflicts_info}{action_info}")
 
             previous_episode_time = current_time
             previous_timesteps = total_timesteps
@@ -750,6 +927,32 @@ def run_train_dqn_both_timesteps(
         runtime_end_in_seconds = time.time()
         runtime_in_seconds = runtime_end_in_seconds - runtime_start_in_seconds
         actual_total_timesteps = total_timesteps
+        
+        # Save episode metrics to file for analysis
+        metrics_save_path = f"{save_results_big_run}/numpy/{env_type}_metrics_seed_{single_seed}.npz"
+        np.savez(metrics_save_path, **episode_metrics)
+        print(f"Episode metrics saved to: {metrics_save_path}")
+        
+        # Print summary statistics
+        if episode_metrics['conflicts_total']:
+            avg_conflicts_total = np.mean(episode_metrics['conflicts_total'])
+            avg_conflicts_resolved = np.mean(episode_metrics['conflicts_resolved'])
+            overall_success_rate = (np.sum(episode_metrics['conflicts_resolved']) / np.sum(episode_metrics['conflicts_total']) * 100) if np.sum(episode_metrics['conflicts_total']) > 0 else 0.0
+            total_max_steps_hit = np.sum(episode_metrics['max_steps_hit'])
+            avg_resolution_bonus = np.mean(episode_metrics['resolution_bonus_total'])
+            avg_unresolved_penalty = np.mean(episode_metrics['unresolved_penalty_total'])
+            print(f"\n=== Training Summary for {env_type} (seed {single_seed}) ===")
+            print(f"Overall conflict resolution rate: {overall_success_rate:.1f}% ({np.sum(episode_metrics['conflicts_resolved'])}/{np.sum(episode_metrics['conflicts_total'])})")
+            print(f"Average conflicts per episode: {avg_conflicts_total:.1f}")
+            print(f"Average conflicts resolved per episode: {avg_conflicts_resolved:.1f}")
+            print(f"Total max steps hit: {total_max_steps_hit}")
+            print(f"Average resolution bonus per episode: {avg_resolution_bonus:.2f}")
+            print(f"Average unresolved penalty per episode: {avg_unresolved_penalty:.2f}")
+            print(f"Total exploration actions: {np.sum(episode_metrics['exploration_actions'])}")
+            print(f"Total exploitation actions: {np.sum(episode_metrics['exploitation_actions'])}")
+            print(f"Total Q-value exploration actions: {np.sum(episode_metrics['q_value_exploration_actions'])}")
+            print(f"Total conflict-guided actions: {np.sum(episode_metrics['conflict_guided_actions'])}")
+            print("=" * 60)
 
         # Return collected data
         return rewards, test_rewards, total_timesteps, epsilon_values, good_rewards, {}, model_path, detailed_episode_data
